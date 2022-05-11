@@ -1,0 +1,29 @@
+{
+    "FileVersion": 3,
+    "Version": 1,
+    "VersionName": "1.0",
+    "FriendlyName": "AffinityTable",
+    "Description": "An asset, authoring utility, and runtime query system that defines structured, taxonomical data relationships between pairs of game tags",
+    "Category": "Other",
+    "CreatedBy": "Inflexion Games",
+    "CreatedByURL": "https://www.inflexion.io/",
+    "DocsURL": "",
+    "MarketplaceURL": "",
+    "SupportURL": "",
+    "CanContainContent": true,
+    "IsBetaVersion": false,
+    "IsExperimentalVersion": false,
+    "Installed": false,
+    "Modules": [
+        {
+            "Name": "AffinityTable",
+            "Type": "Runtime",
+            "LoadingPhase": "Default"
+        },
+        {
+            "Name": "AffinityTableEditor",
+            "Type": "UncookedOnly",
+            "LoadingPhase": "Default"
+        }
+    ]
+}
