@@ -124,3 +124,13 @@ Once the table is selected, you can connect its structure output pins to variabl
 
 In C++, you can directly use any of the querying functions defined on `AffinityTable.h`
 
+## Contributions
+
+We welcome community contributions to this project. Please read our [Contributor Guide](CONTRIBUTING.md) for important workflows and information before you make any contribution.
+
+All contributions intentionally submitted for inclusion in this project shall comply with the Apache 2.0 license as described below:
+
+## License
+
+This project is licensed under the Apache License, Version 2.0 ([LICENSE](LICENSE.md) or <http://www.apache.org/licenses/LICENSE-2.0>)
+
