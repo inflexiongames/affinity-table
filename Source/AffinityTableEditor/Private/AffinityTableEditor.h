@@ -1,5 +1,5 @@
 /**
- * Copyright 2022 Inflexion Games. All Rights Reserved.
+ * Copyright 2024 Inflexion Games. All Rights Reserved.
  *
  * Licensed under the Apache License, Version 2.0 (the "License");
  * you may not use this file except in compliance with the License.
@@ -13,7 +13,6 @@
  * See the License for the specific language governing permissions and
  * limitations under the License.
  */
-
 #pragma once
 
 #include "CoreMinimal.h"
@@ -22,15 +21,65 @@
 #include "Logging/LogMacros.h"
 #include "Toolkits/AssetEditorToolkit.h"
 #include "Toolkits/IToolkitHost.h"
+#include "Widgets/Input/SComboBox.h"
 #include "Widgets/Views/STreeView.h"
 
 #include "AffinityTable.h"
 #include "AffinityTableNode.h"
 
+#include "AffinityTableEditor.generated.h"
+
 class SAffinityTableCell;
 class SAffinityTableHeader;
 
 DECLARE_LOG_CATEGORY_EXTERN(LogAffinityTableEditor, Log, All);
+
+/**
+ * Keeper of per-affinity table preferences
+ */
+USTRUCT()
+struct FAffinityTablePreferences
+{
+	GENERATED_BODY()
+
+	/** List of collapsed rows */
+	UPROPERTY()
+	TSet<FName> CR;
+
+	/** List of collapsed columns */
+	UPROPERTY()
+	TSet<FName> CC;
+};
+
+/**
+ * Keeper of per-user local preferences for the AffinityTable Editor
+ */
+UCLASS(Config = EditorPerProjectUserSettings)
+class UAffinityTableEditorPreferences : public UObject
+{
+	GENERATED_BODY()
+public:
+	/**
+	 * Retrieve existing table preferences
+	 *
+	 * @param TableName Unique name of a table asset
+	 * @return A pointer to the preferences of this table, if any exist
+	 */
+	const FAffinityTablePreferences* GetPreferencesForTable(const FName& TableName) const;
+
+	/**
+	 * Assigns preferences for a given table asset
+	 *
+	 * @param TableName Unique name of a table asset
+	 * @param Preferences Desired preferences for this table
+	 */
+	void SetPreferencesForTable(const FName& TableName, const FAffinityTablePreferences& Preferences);
+
+private:
+	/** Preferences per table asset */
+	UPROPERTY(Config)
+	TMap<FName, FAffinityTablePreferences> TablePreferences;
+};
 
 /**
  *	Defines the base editor for UAffinityTable assets.
@@ -47,7 +96,7 @@ public:
 
 	/**
 	 * PageView contains the data required to render the grid of each script structure contained in our asset,
-	 * it should cache anything that changes (and should be remembered) when the user picks a different page. 
+	 * it should cache anything that changes (and should be remembered) when the user picks a different page.
 	 */
 	struct PageView
 	{
@@ -207,7 +256,7 @@ public:
 	}
 
 	/**
-	 * Returns the cached node for a column based on its name, or InvalidIndex if not found. 
+	 * Returns the cached node for a column based on its name, or InvalidIndex if not found.
 	 * @param A column name obtained from one of our asset's tags
 	 */
 	FORCEINLINE TWeakPtr<FAffinityTableNode> GetNodeForColumn(const FName& ColumnName)
@@ -216,7 +265,7 @@ public:
 	}
 
 	/**
-	 * Const access to our current page view for referencing. 
+	 * Const access to our current page view for referencing.
 	 */
 	FORCEINLINE const TWeakPtr<PageView> GetActivePageView() const
 	{
@@ -229,7 +278,7 @@ public:
 private:
 	/**
 	 * Resets our inner structures to conform to the topology of the
-	 * Affinity Table we are currently editing. 
+	 * Affinity Table we are currently editing.
 	 */
 	void ResyncAsset();
 
@@ -279,7 +328,7 @@ private:
 	 * Returns true if the provided property is currently visible.
 	 * @param Property Instance of the property to query
 	 */
-	bool IsPropertyVisible(const FProperty* Property);
+	bool IsPropertyVisible(const FProperty* Property) const;
 
 	// Tag Tree Management Functions
 	//////////////////////////////////////////////////////////////////////////
@@ -303,7 +352,7 @@ private:
 	 * @param OnIndexForTag Callback index generator for this tag
 	 * @param OnNewNode Callback for any new nodes resulting from this tag
 	 */
-	void InsertTag(const FGameplayTag& InTag, TWeakPtr<FAffinityTableNode> InNode, FAffinityTableNode::IndexGenerator OnIndexForTag, FAffinityTableNode::NewNodeCallback OnNewNode = nullptr);
+	static void InsertTag(const FGameplayTag& InTag, TWeakPtr<FAffinityTableNode> InNode, FAffinityTableNode::IndexGenerator OnIndexForTag, FAffinityTableNode::NewNodeCallback OnNewNode = nullptr);
 
 	// AffinityTable Widget Messaging and Maintenance
 	//////////////////////////////////////////////////////////////////////////
@@ -319,7 +368,7 @@ private:
 
 	/**
 	 * Invalidates the current table view.
-	 * @param RegenerateTree If true, the whole visual array of rows and columns is reconstructed. 
+	 * @param RegenerateTree If true, the whole visual array of rows and columns is reconstructed.
 	 */
 	void RefreshTable(bool RegenerateTree = true);
 
@@ -372,19 +421,19 @@ private:
 	using CellUpdateType = uint8;
 
 	/** Update the description in cells with UI components */
-	static const CellUpdateType CellDescription = 1;
+	static constexpr CellUpdateType CellDescription = 1;
 
 	/** Enact data inheritance. This will cause inherited cells to modify values based on their parents */
-	static const CellUpdateType CellData = 1 << 1;
+	static constexpr CellUpdateType CellDataInheritance = 1 << 1;
 
 	/** Refresh the cached list of visible fields before all other updates */
-	static const CellUpdateType CellVisibleFields = 1 << 2;
+	static constexpr CellUpdateType CellVisibleFields = 1 << 2;
 
 	/** Refresh cell inheritance from our asset */
-	static const CellUpdateType CellInheritance = 1 << 3;
+	static constexpr CellUpdateType CellInheritance = 1 << 3;
 
 	/** Refresh the asset indexes for the row and column of this cell*/
-	static const CellUpdateType CellAssetIndexes = 1 << 4;
+	static constexpr CellUpdateType CellAssetIndexes = 1 << 4;
 
 	/**
 	 * Performs update operations over our table cells.
@@ -405,7 +454,7 @@ private:
 
 	/**
 	 * Inserts a row into our table. Assumes our asset already has it
-	 * @param Tag The tag we are inserting. 
+	 * @param Tag The tag we are inserting.
 	 */
 	void InsertRow(const FGameplayTag& Tag);
 
@@ -491,7 +540,7 @@ private:
 	 * @param InCell Cell that gets its inheritance reset
 	 * @param ColumnStream True if we inherit across values, false to inherit across rows.
 	 * @param RestoreFromAsset If true, try to restore this cell's inheritance from our table asset first. False
-	 *			will overwrite any previously existing link. 
+	 *			will overwrite any previously existing link.
 	 */
 	void AssignInheritance(TWeakPtr<Cell> InCell, bool ColumnStream, bool RestoreFromAsset = false);
 
@@ -504,9 +553,19 @@ private:
 
 	/**
 	 * Removes any existing cell linking to this cell, marking it as non-inheriting.
-	 * @param Incell Cell that loses data inheritance
+	 * @param InCell Cell that loses data inheritance
 	 */
 	void UnlinkCell(TWeakPtr<Cell>& InCell);
+
+	/**
+	 * Loads the preferences of the editor from local .ini config
+	 */
+	void LoadTablePreferences() const;
+
+	/**
+	 * Saves the current preferences back into a local .ini config
+	 */
+	void SaveTablePreferences() const;
 
 	/** The AffinityTable we are editing. Assumed to be valid through the lifetime of the editor  */
 	UAffinityTable* TableBeingEdited;
@@ -542,7 +601,7 @@ private:
 	TSharedPtr<SHeaderRow> HeaderRow;
 
 	/** Combo button for the page selection */
-	TSharedPtr<class SComboBox<TSharedPtr<PageView>>> PageSelectorComboBox;
+	TSharedPtr<SComboBox<TSharedPtr<PageView>>> PageSelectorComboBox;
 
 	/** Combo button for configuring the grid's visible properties */
 	TSharedPtr<class SComboButton> VisibilityComboButton;
@@ -585,6 +644,9 @@ private:
 
 	/** Tag we are currently adding */
 	FGameplayTag SelectedTag;
+
+	/** AT Editor preferences */
+	TStrongObjectPtr<UAffinityTableEditorPreferences> EditorPreferences;
 
 	/** Whether we are currently adding a row or column tag */
 	bool SelectedTagIsRow;

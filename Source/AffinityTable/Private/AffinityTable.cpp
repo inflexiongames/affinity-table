@@ -1,5 +1,5 @@
 /**
- * Copyright 2022 Inflexion Games. All Rights Reserved.
+ * Copyright 2024 Inflexion Games. All Rights Reserved.
  *
  * Licensed under the Apache License, Version 2.0 (the "License");
  * you may not use this file except in compliance with the License.
@@ -14,15 +14,9 @@
  * limitations under the License.
  */
 
-
 #include "AffinityTable.h"
 #include "AffinityTablePage.h"
 
-#include "EditorFramework/AssetImportData.h"
-#include "Misc/FileHelper.h"
-#include "Misc/Paths.h"
-#include "Serialization/JsonReader.h"
-#include "Serialization/JsonSerializer.h"
 #include "UObject/LinkerLoad.h"
 
 DEFINE_LOG_CATEGORY(LogAffinityTable);
@@ -33,20 +27,24 @@ DEFINE_LOG_CATEGORY(LogAffinityTable);
 // 1: Initial AT version
 // 2: Structures are no longer transient since they must be loaded before this table can serialize.
 // 3: Per-structure inheritance maps
-const uint32 UAffinityTable::FileFormatVersion = 3;
+// 4: Last known structure footprints
+constexpr uint32 UAffinityTable::FileFormatVersion = 4;
 
 // AffinityTable
 //////////////////////////////////////////////////////////////////////////
 
-UAffinityTable::UAffinityTable(const FObjectInitializer& ObjectInitializer) :
-	Super(ObjectInitializer),
-	NextRowIndex(0),
-	NextColumnIndex(0),
+bool UAffinityTable::CellTags::operator!=(const CellTags& Parent) const
+{
+	return Row != Parent.Row || Column != Parent.Column;
+}
+
+UAffinityTable::UAffinityTable(const FObjectInitializer& ObjectInitializer)
+	: Super(ObjectInitializer)
 // Normally, fixed mode is only for gameplay, but we can easily change this later if required
 #if WITH_EDITOR
-	FixedModeActive(false)
+	, bFixedModeActive(false)
 #else
-	FixedModeActive(true)
+	, bFixedModeActive(true)
 #endif
 {
 }
@@ -65,15 +63,14 @@ void UAffinityTable::GetPreloadDependencies(TArray<UObject*>& OutDeps)
 	}
 }
 
-bool UAffinityTable::Query(const CellTags& InCellTags, bool ExactMatch, TArray<const UScriptStruct*>& InStructureTypes, TArray<FAffinityTableCellDataWrapper>& OutMemoryPtrs)
+bool UAffinityTable::Query(const CellTags& InCellTags, const bool ExactMatch, TArray<const UScriptStruct*>& InStructureTypes, TArray<FAffinityTableCellDataWrapper>& OutMemoryPtrs) const
 {
 	bool QueryResult = false;
 	if (Structures.Num())
 	{
-		Cell QueriedCell{ GetRowIndex(InCellTags.Row, ExactMatch), GetColumnIndex(InCellTags.Column, ExactMatch) };
-
 		// Make sure we have a result. Cell indexes will be invalid if we didn't find an exact match or a closest match.
-		if (QueriedCell.Row != InvalidIndex && QueriedCell.Column != InvalidIndex)
+		if (const Cell QueriedCell{ GetRowIndex(InCellTags.Row, ExactMatch), GetColumnIndex(InCellTags.Column, ExactMatch) };
+			QueriedCell.Row != InvalidIndex && QueriedCell.Column != InvalidIndex)
 		{
 			// Insert data locations for all known requested structures. At this point, it is
 			// an error to query a structure we don't know about.
@@ -96,15 +93,14 @@ bool UAffinityTable::Query(const CellTags& InCellTags, bool ExactMatch, TArray<c
 	return QueryResult;
 }
 
-bool UAffinityTable::QueryForRow(const FGameplayTag& RowTag, bool ExactMatch, TArray<const UScriptStruct*>& InStructureTypes, TArray<FCellDataArrayWrapper>& OutMemoryPtrs)
+bool UAffinityTable::QueryForRow(const FGameplayTag& RowTag, const bool ExactMatch, TArray<const UScriptStruct*>& InStructureTypes, TArray<FCellDataArrayWrapper>& OutMemoryPtrs) const
 {
 	bool QueryResult = false;
 	if (Structures.Num())
 	{
-		TagIndex RowIndex = GetRowIndex(RowTag, ExactMatch);
-
 		// Make sure we have a result. Will be invalid if we didn't find an exact match or a closest match.
-		if (RowIndex != InvalidIndex)
+		if (const TagIndex RowIndex = GetRowIndex(RowTag, ExactMatch);
+			RowIndex != InvalidIndex)
 		{
 			TArray<uint8*> Data;
 			// Insert data locations for all known requested structures. At this point, it is
@@ -114,7 +110,7 @@ bool UAffinityTable::QueryForRow(const FGameplayTag& RowTag, bool ExactMatch, TA
 				GetRowData(RowIndex, Struct, Data);
 				if (Data.Num() > 0)
 				{
-					int CurrIndex = OutMemoryPtrs.Num();
+					const int CurrIndex = OutMemoryPtrs.Num();
 					// The wrapper is an inconvenience, but most of the time queries will come from
 					// blueprint functions, which need it to move the data around.
 					OutMemoryPtrs.Add(FCellDataArrayWrapper());
@@ -146,21 +142,19 @@ UAffinityTable::TagIndex UAffinityTable::GetColumnIndex(const FGameplayTag& InTa
 	return GetIndex(Columns, InTag, ExactMatch);
 }
 
-uint8* UAffinityTable::GetCellData(const Cell& InCell, const UScriptStruct* InScriptStruct)
+uint8* UAffinityTable::GetCellData(const Cell InCell, const UScriptStruct* InScriptStruct) const
 {
 	FStructDatablock::DatablockPtr Data = nullptr;
-	FAffinityTablePage* Page = GetPageForStruct(InScriptStruct);
-	if (Page)
+	if (const FAffinityTablePage* Page = GetPageForStruct(InScriptStruct))
 	{
 		Data = Page->GetDatablockPtr(InCell.Row, InCell.Column);
 	}
 	return Data;
 }
 
-void UAffinityTable::GetRowData(TagIndex RowIndex, const UScriptStruct* InScriptStruct, TArray<uint8*>& OutData)
+void UAffinityTable::GetRowData(const TagIndex RowIndex, const UScriptStruct* InScriptStruct, TArray<uint8*>& OutData) const
 {
-	FAffinityTablePage* Page = GetPageForStruct(InScriptStruct);
-	if (Page)
+	if (const FAffinityTablePage* Page = GetPageForStruct(InScriptStruct))
 	{
 		Page->GetDatablockPtrsForRow(RowIndex, OutData);
 	}
@@ -168,7 +162,7 @@ void UAffinityTable::GetRowData(TagIndex RowIndex, const UScriptStruct* InScript
 
 #if WITH_EDITOR
 
-void UAffinityTable::SetStructureChangeCallback(StructureChangeCallback InCallback)
+void UAffinityTable::SetStructureChangeCallback(const StructureChangeCallback& InCallback)
 {
 	ChangeCallback = InCallback;
 }
@@ -178,10 +172,12 @@ void UAffinityTable::PostEditChangeProperty(struct FPropertyChangedEvent& Proper
 	Super::PostEditChangeProperty(PropertyChangedEvent);
 
 	// Respond to Structure changes
-	const FName PropertyName = (PropertyChangedEvent.Property != nullptr) ? PropertyChangedEvent.Property->GetFName() : NAME_None;
-	if (PropertyName == GET_MEMBER_NAME_CHECKED(UAffinityTable, Structures))
+	if (const FName PropertyName = (PropertyChangedEvent.Property != nullptr)
+									   ? PropertyChangedEvent.Property->GetFName()
+									   : NAME_None;
+		PropertyName == GET_MEMBER_NAME_CHECKED(UAffinityTable, Structures))
 	{
-		static EPropertyChangeType::Type ObservedChanges = EPropertyChangeType::ValueSet | EPropertyChangeType::ArrayRemove;
+		static EPropertyChangeType::Type ObservedChanges = EPropertyChangeType::ValueSet | EPropertyChangeType::ArrayRemove | EPropertyChangeType::ArrayClear;
 		if (PropertyChangedEvent.ChangeType & ObservedChanges)
 		{
 			// Allocate memory for new pages. We must keep the dimensionality of other pages, which might include currently unused (deleted) rows.
@@ -190,7 +186,7 @@ void UAffinityTable::PostEditChangeProperty(struct FPropertyChangedEvent& Proper
 			uint32 ColumnCount = Columns.Num();
 			if (Pages.Num())
 			{
-				TSharedRef<FAffinityTablePage> ExistingPage = Pages[0];
+				const TSharedRef<FAffinityTablePage> ExistingPage = Pages[0];
 				ExistingPage->GetRowAndColumnCount(RowCount, ColumnCount);
 			}
 
@@ -207,37 +203,37 @@ void UAffinityTable::PostEditChangeProperty(struct FPropertyChangedEvent& Proper
 // The following 4 functions could be collapsed into fronts with a common add and a common delete, but
 // the gains are not much in terms of space or simplicity.
 
-bool UAffinityTable::AddRow(FGameplayTag& InTag)
+bool UAffinityTable::AddRow(const FGameplayTag& InTag)
 {
 	if (InTag.IsValid() && !Rows.Contains(InTag))
 	{
 		MarkPackageDirty();
-		for (TSharedRef<FAffinityTablePage>& Page : Pages)
+		for (const TSharedRef<FAffinityTablePage>& Page : Pages)
 		{
 			Page->AddRow();
 		}
 		Rows.Add(InTag, NextRowIndex++);
 
 		// Recursive add
-		FGameplayTag Parent = InTag.RequestDirectParent();
+		const FGameplayTag Parent = InTag.RequestDirectParent();
 		AddRow(Parent);
 		return true;
 	}
 	return false;
 }
 
-bool UAffinityTable::AddColumn(FGameplayTag& InTag)
+bool UAffinityTable::AddColumn(const FGameplayTag& InTag)
 {
 	if (InTag.IsValid() && !Columns.Contains(InTag))
 	{
 		MarkPackageDirty();
-		for (TSharedRef<FAffinityTablePage>& Page : Pages)
+		for (const TSharedRef<FAffinityTablePage>& Page : Pages)
 		{
 			Page->AddColumn();
 		}
 		Columns.Add(InTag, NextColumnIndex++);
 
-		FGameplayTag Parent = InTag.RequestDirectParent();
+		const FGameplayTag Parent = InTag.RequestDirectParent();
 		AddColumn(Parent);
 		return true;
 	}
@@ -249,8 +245,8 @@ void UAffinityTable::DeleteRow(const FGameplayTag& InTag)
 	if (InTag.IsValid() && Rows.Contains(InTag))
 	{
 		MarkPackageDirty();
-		TagIndex RowIndex = Rows[InTag];
-		for (TSharedRef<FAffinityTablePage>& Page : Pages)
+		const TagIndex RowIndex = Rows[InTag];
+		for (const TSharedRef<FAffinityTablePage>& Page : Pages)
 		{
 			Page->DeleteRow(RowIndex);
 		}
@@ -267,8 +263,8 @@ void UAffinityTable::DeleteColumn(const FGameplayTag& InTag)
 	if (InTag.IsValid() && Columns.Contains(InTag))
 	{
 		MarkPackageDirty();
-		TagIndex ColIndex = Columns[InTag];
-		for (TSharedRef<FAffinityTablePage>& Page : Pages)
+		const TagIndex ColIndex = Columns[InTag];
+		for (const TSharedRef<FAffinityTablePage>& Page : Pages)
 		{
 			Page->DeleteColumn(ColIndex);
 		}
@@ -280,24 +276,29 @@ void UAffinityTable::DeleteColumn(const FGameplayTag& InTag)
 	}
 }
 
-void UAffinityTable::SetTagColor(const FGameplayTag& InTag, const FLinearColor& Color, bool IsRowTag)
+void UAffinityTable::SetTagColor(const FGameplayTag& InTag, const FLinearColor& Color, const bool IsRowTag)
 {
-	TMap<FGameplayTag, FLinearColor>& ColorMap = IsRowTag ? RowColors : ColumnColors;
-	if (!ColorMap.Contains(InTag))
+	if (TMap<FGameplayTag, FLinearColor>& ColorMap = IsRowTag
+														 ? RowColors
+														 : ColumnColors;
+		!ColorMap.Contains(InTag))
 	{
 		ColorMap.Add(InTag, Color);
+		MarkPackageDirty();
 	}
-	else
+	else if (ColorMap[InTag] != Color)
 	{
 		ColorMap[InTag] = Color;
+		MarkPackageDirty();
 	}
-	MarkPackageDirty();
 }
 
-bool UAffinityTable::TryGetTagColor(const FGameplayTag& InTag, FLinearColor& OutColor, bool IsRowTag) const
+bool UAffinityTable::TryGetTagColor(const FGameplayTag& InTag, FLinearColor& OutColor, const bool IsRowTag) const
 {
-	const TMap<FGameplayTag, FLinearColor>& ColorMap = IsRowTag ? RowColors : ColumnColors;
-	if (ColorMap.Contains(InTag))
+	if (const TMap<FGameplayTag, FLinearColor>& ColorMap = IsRowTag
+															   ? RowColors
+															   : ColumnColors;
+		ColorMap.Contains(InTag))
 	{
 		OutColor = ColorMap[InTag];
 		return true;
@@ -310,14 +311,16 @@ void UAffinityTable::SetInheritanceLink(const UScriptStruct* InStruct, const Cel
 	check(InStruct);
 
 	InheritanceMap& Map = InheritanceMaps.FindOrAdd(InStruct->GetFName());
-	FString CellID = StringIDForCell(Child);
-	if (!Map.Contains(CellID))
+	if (const FString CellID = StringIDForCell(Child);
+		!Map.Contains(CellID))
 	{
 		Map.Add(CellID, Parent);
+		MarkPackageDirty();
 	}
-	else
+	else if (Map[CellID] != Parent)
 	{
 		Map[CellID] = Parent;
+		MarkPackageDirty();
 	}
 }
 
@@ -326,8 +329,8 @@ bool UAffinityTable::TryGetInheritanceLink(const UScriptStruct* InStruct, const 
 	check(InStruct);
 
 	InheritanceMap& Map = InheritanceMaps.FindOrAdd(InStruct->GetFName());
-	FString CellID = StringIDForCell(Child);
-	if (Map.Contains(CellID))
+	if (const FString CellID = StringIDForCell(Child);
+		Map.Contains(CellID))
 	{
 		OutParent = Map[CellID];
 		return true;
@@ -342,11 +345,25 @@ void UAffinityTable::RemoveInheritanceLink(const UScriptStruct* InStruct, const 
 	SetInheritanceLink(InStruct, InCell, CellTags());
 }
 
+bool UAffinityTable::AreCellsIdentical(const UScriptStruct* Struct, const Cell& CellA, const Cell& CellB) const
+{
+	if (Struct && Struct->IsValidLowLevel() && Structures.Contains(Struct))
+	{
+		const uint8* DataA = GetCellData(CellA, Struct);
+		const uint8* DataB = GetCellData(CellB, Struct);
+		if (DataA && DataB)
+		{
+			return Struct->CompareScriptStruct(DataA, DataB, PPF_DeepComparison);
+		}
+	}
+	return false;
+}
+
 void UAffinityTable::PreSaveTable()
 {
 	// Fix-up our data: Unreal maps do not necessarily retrieve keys in insertion order, but indexes
 	// are always ordered sequentially. We need to store rows/cols in the exact order we want to read them later.
-	static auto IndexSort = [](const TagIndex& A, const TagIndex& B) { return A < B; };
+	static auto IndexSort = [](const TagIndex A, const TagIndex B) { return A < B; };
 	Rows.ValueSort(IndexSort);
 	Columns.ValueSort(IndexSort);
 
@@ -383,10 +400,13 @@ void UAffinityTable::SaveTable(FArchive& Ar)
 	int32 PagesToSave = StructsToSave.Num();
 	Ar << PagesToSave;
 
-	for (ScriptPagePair& Pair : StructsToSave)
+	for (const ScriptPagePair& Pair : StructsToSave)
 	{
 		FString StructName = Pair.Key->GetFName().ToString();
+		int32 StructFootprint = Pair.Value->GetStructSize();
+
 		Ar << StructName;
+		Ar << StructFootprint;
 		SerializePage(Ar, Pair.Value, Pair.Key);
 	}
 
@@ -402,7 +422,7 @@ void UAffinityTable::SaveTable(FArchive& Ar)
 	// let n = PagesToSave
 	// Then, serialized maps = Page 0 { Struct name, link count, Links }, ... Page n
 	Ar << PagesToSave;
-	for (ScriptPagePair& Pair : StructsToSave)
+	for (const ScriptPagePair& Pair : StructsToSave)
 	{
 		FName StructName = Pair.Key->GetFName();
 		Ar << StructName;
@@ -422,6 +442,66 @@ void UAffinityTable::SaveTable(FArchive& Ar)
 	}
 }
 
+void UAffinityTable::EnsureTagHierarchy()
+{
+	// Tag hierarchies break if we delete non-leaf tags, leaving their children dangling. Because
+	// ATs assume tags are continuous, we must ensure the taxonomy is safe.
+	auto FindOrphans = [](TSet<FGameplayTag>& Orphans, TArray<FGameplayTag>& Tags) {
+		TSet<FGameplayTag> Tails;
+		for (const FGameplayTag& Tag : Tags)
+		{
+			FGameplayTag ParentTag = Tag.RequestDirectParent();
+
+			bool bFoundOrphan{ false };
+			while (ParentTag.IsValid() && !bFoundOrphan)
+			{
+				// If our tails contain this sequence, we are guaranteed to be continuous
+				if (Tails.Contains(ParentTag))
+				{
+					ParentTag = FGameplayTag::EmptyTag;
+				}
+				// If we know about this parent, it is safe to keep on going
+				else if (Tags.Contains(ParentTag))
+				{
+					ParentTag = ParentTag.RequestDirectParent();
+				}
+				// Otherwise this tag is broken upstream
+				else
+				{
+					Orphans.Add(Tag);
+					bFoundOrphan = true;
+				}
+			};
+
+			if (!bFoundOrphan)
+			{
+				Tails.Add(Tag);
+			}
+		}
+	};
+
+	TSet<FGameplayTag> OrphanRows;
+	FindOrphans(OrphanRows, RowTags);
+	for (const FGameplayTag& Row : OrphanRows)
+	{
+		UE_LOG(LogAffinityTable, Error, TEXT("The row tag %s on affinity table %s has a broken hierarchy and will be deleted."
+											 "Please rename this tag to an appropriate value, restore the table from source control, and try again"),
+			*Row.ToString(), *GetPathName());
+		DeleteRow(Row);
+	}
+
+	TSet<FGameplayTag> OrphanColumns;
+	FindOrphans(OrphanColumns, ColumnTags);
+	for (const FGameplayTag& Column : OrphanColumns)
+	{
+		UE_LOG(LogAffinityTable, Error, TEXT("The column tag %s on affinity table %s has a broken hierarchy and will be deleted."
+											 "Please rename this tag to an appropriate value, restore the table from source control, and try again"),
+			*Column.ToString(), *GetPathName());
+		DeleteColumn(Column);
+	}
+
+	bHasLoadingErrors |= OrphanRows.Num() > 0 || OrphanColumns.Num() > 0;
+}
 #endif
 
 void UAffinityTable::LoadTable(FArchive& Ar)
@@ -441,9 +521,9 @@ void UAffinityTable::LoadTable(FArchive& Ar)
 		// Supported migrations
 		switch (ArchiveFormat)
 		{
-			case 2:
-				//LoadTable_V2(Ar);
-				//break;
+			case 3:
+				LoadTable_V3(Ar);
+				break;
 
 			default:
 				UE_LOG(LogAffinityTable, Error, TEXT("Unsupported file format on table %s: version (%d) cannot be converted to version (%d)"),
@@ -455,35 +535,43 @@ void UAffinityTable::LoadTable(FArchive& Ar)
 	// Runtime data
 	//////////////////////////////////////////////////////////////////////////
 
-	uint32 RowCount, ColCount = 0;
+	// Populate our row and column map lookup table
+	GenerateRowAndColumnMaps();
+
+#if UE_BUILD_DEVELOPMENT
+	// Don't continue if we have errors at this point: our memory footprints will not match
+	if (bHasLoadingErrors)
+	{
+		UE_LOG(LogAffinityTable, Error, TEXT("Row or column number mismatch in affinity table %s. Cannot reload from disk. "
+											 "Please revert to a version of the table where the tags were stable, and redo modifications carefully."),
+			*GetPathName());
+		return;
+	}
+#endif
+
+	const uint32 RowCount = Rows.Num();
+	const uint32 ColCount = Columns.Num();
+
 	int32 PagesToLoad;
 	FString StructureName;
-	bool bIsLoading = Ar.IsLoading();
+	int32 StructureFootprint;
 
-	// Rows
-	for (FGameplayTag Tag : RowTags)
-	{
-		Rows.Add(Tag, NextRowIndex++);
-	}
-
-	// Columns
-	for (FGameplayTag Tag : ColumnTags)
-	{
-		Columns.Add(Tag, NextColumnIndex++);
-	}
-
-	RowCount = Rows.Num();
-	ColCount = Columns.Num();
+	// An array to verify the footprint versions
+	TArray<int32> OldFootprints;
 
 	// Structures and structure memory
 	Ar << PagesToLoad;
 	while (PagesToLoad)
 	{
 		Ar << StructureName;
+		Ar << StructureFootprint;
+		OldFootprints.Add(StructureFootprint);
+
 		UScriptStruct** FoundStruct = Structures.FindByPredicate([&StructureName](const UScriptStruct* Struct) { return Struct && Struct->GetFName().ToString() == StructureName; });
 		if (!FoundStruct)
 		{
 			UE_LOG(LogAffinityTable, Error, TEXT("The Affinity table %s does not contain the requested structure %s"), *GetPathName(), *StructureName);
+			bHasLoadingErrors = true;
 			return;
 		}
 		UScriptStruct* ScriptStruct = *FoundStruct;
@@ -492,7 +580,7 @@ void UAffinityTable::LoadTable(FArchive& Ar)
 		// to manually link it, with its very own linker.
 		EnsureStructIsLoaded(ScriptStruct);
 
-		TSharedRef<FAffinityTablePage> Page(new FAffinityTablePage(ScriptStruct, RowCount, ColCount, FixedModeActive));
+		TSharedRef<FAffinityTablePage> Page(new FAffinityTablePage(ScriptStruct, RowCount, ColCount, bFixedModeActive));
 		Pages.Add(Page);
 
 		SerializePage(Ar, &Page.Get(), ScriptStruct);
@@ -500,8 +588,21 @@ void UAffinityTable::LoadTable(FArchive& Ar)
 		PagesToLoad--;
 	}
 
+#if !UE_BUILD_SHIPPING && !UE_SERVER
+	// Verify page integrity. Do this only for dev builds, as production/final builds will contain a smaller footprint
+	// regardless, and this will create unnecessary log spam.
+	for (int i = 0; i < OldFootprints.Num(); ++i)
+	{
+		if (Pages[i]->GetStructSize() != OldFootprints[i])
+		{
+			UE_LOG(LogAffinityTable, Warning, TEXT("The structure %s footprint on AffinityTable %s changed from %d to %d since the last time it was saved, "
+												   "please ensure to re-save and submit the table to correct this and prevent unexpected data."),
+				*Pages[i]->GetStruct()->GetFName().ToString(), *GetPathName(), OldFootprints[i], Pages[i]->GetStructSize());
+		}
+	}
+#endif
+
 	// Editor-only data
-	// TODO: We can probably cut this section if we are not running the editor.
 	//////////////////////////////////////////////////////////////////////////
 
 	// Row and column colors
@@ -534,85 +635,144 @@ void UAffinityTable::LoadTable(FArchive& Ar)
 		}
 		PagesToLoad--;
 	}
+
+#if WITH_EDITOR
+	// Fixup our tags
+	EnsureTagHierarchy();
+#endif
 }
 
-//left as comment for example of a version migration.
-//void UAffinityTable::LoadTable_V2(FArchive& Ar)
-//{
-//	uint32 RowCount, ColCount = 0;
-//	int32 PagesToLoad;
-//	FString StructureName;
-//	bool bIsLoading = Ar.IsLoading();
-//
-//	// Rows
-//	for (FGameplayTag Tag : RowTags)
-//	{
-//		Rows.Add(Tag, NextRowIndex++);
-//	}
-//
-//	// Columns
-//	for (FGameplayTag Tag : ColumnTags)
-//	{
-//		Columns.Add(Tag, NextColumnIndex++);
-//	}
-//
-//	RowCount = Rows.Num();
-//	ColCount = Columns.Num();
-//
-//	// Structures and structure memory
-//	Ar << PagesToLoad;
-//	while (PagesToLoad)
-//	{
-//		Ar << StructureName;
-//		UScriptStruct** FoundStruct = Structures.FindByPredicate([&StructureName](const UScriptStruct* Struct) { return Struct && Struct->GetFName().ToString() == StructureName; });
-//		if (!FoundStruct)
-//		{
-//			UE_LOG(LogAffinityTable, Error, TEXT("The Affinity table %s does not contain the requested structure %s"), *GetPathName(), *StructureName);
-//			return;
-//		}
-//		UScriptStruct* ScriptStruct = *FoundStruct;
-//
-//		// Loading a structure is not enough to get its internals properly set-up. You may need
-//		// to manually link it, with its very own linker.
-//		EnsureStructIsLoaded(ScriptStruct);
-//
-//		TSharedRef<FAffinityTablePage> Page(new FAffinityTablePage(ScriptStruct, RowCount, ColCount, FixedModeActive));
-//		Pages.Add(Page);
-//
-//		SerializePage(Ar, &Page.Get(), ScriptStruct);
-//
-//		PagesToLoad--;
-//	}
-//
-//	// Editor-only data
-//	// TODO: We can probably cut this section if we are not running the editor.
-//	//////////////////////////////////////////////////////////////////////////
-//
-//	// Row and column colors
-//	Ar << RowColors;
-//	Ar << ColumnColors;
-//
-//	// Inheritance map: create a default graph and add for all valid structures
-//	int32 LinkCount = 0;
-//	FString CellID;
-//	CellTags ParentCell;
-//	InheritanceMap DefaultMap;
-//
-//	Ar << LinkCount;
-//	for (int32 i = 0; i < LinkCount; ++i)
-//	{
-//		Ar << CellID;
-//		Ar << ParentCell.Row;
-//		Ar << ParentCell.Column;
-//		DefaultMap.Add(CellID, ParentCell);
-//	}
-//
-//	for (const UScriptStruct* ThisStruct : Structures)
-//	{
-//		InheritanceMap& ThisMap = InheritanceMaps.FindOrAdd(ThisStruct->GetFName());
-//		ThisMap = DefaultMap;
-//	}
-//}
+void UAffinityTable::GenerateRowAndColumnMaps()
+{
+	// Must check, because calling this function twice during the lifetime of the table is an
+	// error that will likely take us to out of bound index access.
+	check(NextRowIndex == 0 && Rows.Num() == 0);
+	check(NextColumnIndex == 0 && Columns.Num() == 0);
+
+	// Rows
+	for (FGameplayTag Tag : RowTags)
+	{
+#if UE_BUILD_DEVELOPMENT
+		if (Rows.Contains(Tag))
+		{
+			UE_LOG(LogAffinityTable, Error, TEXT("Duplicated row tag %s found on Affinity Table %s, only the first one will be added. "
+												 "Verify the integrity of the table's information before saving and submitting to source control"),
+				*Tag.ToString(), *GetPathName());
+			bHasLoadingErrors = true;
+			continue;
+		}
+#endif
+		Rows.Add(Tag, NextRowIndex++);
+	}
+
+	// Columns
+	for (FGameplayTag Tag : ColumnTags)
+	{
+#if UE_BUILD_DEVELOPMENT
+		if (Columns.Contains(Tag))
+		{
+			UE_LOG(LogAffinityTable, Error, TEXT("Duplicated column tag %s found on Affinity Table %s, only the first one will be added. "
+												 "Verify the integrity of the table's information before saving and submitting to source control"),
+				*Tag.ToString(), *GetPathName());
+			bHasLoadingErrors = true;
+			continue;
+		}
+#endif
+		Columns.Add(Tag, NextColumnIndex++);
+	}
+}
+
+// AT's did not remember their page's structure footprint at v3
+void UAffinityTable::LoadTable_V3(FArchive& Ar)
+{
+	// Runtime data
+	//////////////////////////////////////////////////////////////////////////
+
+	// Populate our row and column map lookup table
+	GenerateRowAndColumnMaps();
+
+#if UE_BUILD_DEVELOPMENT
+	// Don't continue if we have errors at this point: our memory footprints will not match
+	if (bHasLoadingErrors)
+	{
+		UE_LOG(LogAffinityTable, Error, TEXT("Row or column number mismatch in affinity table %s. Cannot reload from disk. "
+											 "Please revert to a version of the table where the tags were stable, and redo modifications carefully."),
+			*GetPathName());
+		return;
+	}
+#endif
+
+	const uint32 RowCount = Rows.Num();
+	const uint32 ColCount = Columns.Num();
+
+	int32 PagesToLoad;
+	FString StructureName;
+
+	// Structures and structure memory
+	Ar << PagesToLoad;
+	while (PagesToLoad)
+	{
+		Ar << StructureName;
+		UScriptStruct** FoundStruct = Structures.FindByPredicate([&StructureName](const UScriptStruct* Struct) { return Struct && Struct->GetFName().ToString() == StructureName; });
+		if (!FoundStruct)
+		{
+			UE_LOG(LogAffinityTable, Error, TEXT("The Affinity table %s does not contain the requested structure %s"), *GetPathName(), *StructureName);
+			bHasLoadingErrors = true;
+			return;
+		}
+		UScriptStruct* ScriptStruct = *FoundStruct;
+
+		// Loading a structure is not enough to get its internals properly set-up. You may need
+		// to manually link it, with its very own linker.
+		EnsureStructIsLoaded(ScriptStruct);
+
+		TSharedRef<FAffinityTablePage> Page(new FAffinityTablePage(ScriptStruct, RowCount, ColCount, bFixedModeActive));
+		Pages.Add(Page);
+
+		SerializePage(Ar, &Page.Get(), ScriptStruct);
+
+		PagesToLoad--;
+	}
+
+	// Editor-only data
+	//////////////////////////////////////////////////////////////////////////
+
+	// Row and column colors
+	Ar << RowColors;
+	Ar << ColumnColors;
+
+	// Inheritance graph
+	Ar << PagesToLoad;
+	while (PagesToLoad)
+	{
+		FName StructName;
+		Ar << StructName;
+
+		int32 LinkCount = 0;
+		Ar << LinkCount;
+
+		if (LinkCount)
+		{
+			InheritanceMap& Map = InheritanceMaps.FindOrAdd(StructName);
+			FString CellID;
+			CellTags ParentCell;
+
+			for (int32 i = 0; i < LinkCount; ++i)
+			{
+				Ar << CellID;
+				Ar << ParentCell.Row;
+				Ar << ParentCell.Column;
+				Map.Add(CellID, ParentCell);
+			}
+		}
+		PagesToLoad--;
+	}
+
+#if WITH_EDITOR
+	// Fixup our tags
+	EnsureTagHierarchy();
+#endif
+}
 
 void UAffinityTable::ClearTable()
 {
@@ -652,13 +812,13 @@ void UAffinityTable::Serialize(FArchive& Ar)
 #endif
 }
 
-void UAffinityTable::SerializePage(FArchive& Ar, FAffinityTablePage* Page, UScriptStruct* Struct)
+void UAffinityTable::SerializePage(FArchive& Ar, const FAffinityTablePage* Page, UScriptStruct* Struct)
 {
 	for (const TPair<FGameplayTag, TagIndex> Row : Rows)
 	{
 		for (const TPair<FGameplayTag, TagIndex> Column : Columns)
 		{
-			FStructDatablock::DatablockPtr DataPtr = Page->GetDatablockPtr(Row.Value, Column.Value);
+			const FStructDatablock::DatablockPtr DataPtr = Page->GetDatablockPtr(Row.Value, Column.Value);
 			if (!DataPtr)
 			{
 				UE_LOG(LogAffinityTable, Error, TEXT("Missing memory location for row %s and column %s on page %s for table %s"), *Row.Key.GetTagName().ToString(), *Column.Key.GetTagName().ToString(), *Struct->GetName(), *GetPathName());
@@ -670,14 +830,14 @@ void UAffinityTable::SerializePage(FArchive& Ar, FAffinityTablePage* Page, UScri
 }
 
 // Allocates space for a number of blocks, but doesn't commit cell handles.
-void UAffinityTable::AllocatePageMemory(uint32 InRows, uint32 InColumns)
+void UAffinityTable::AllocatePageMemory(const uint32 InRows, const uint32 InColumns)
 {
 	// Add new structures
 	for (const UScriptStruct* ScriptStruct : Structures)
 	{
 		if (ScriptStruct && !GetPageForStruct(ScriptStruct))
 		{
-			TSharedRef<FAffinityTablePage> NewPage(new FAffinityTablePage(ScriptStruct, InRows, InColumns, FixedModeActive));
+			TSharedRef<FAffinityTablePage> NewPage(new FAffinityTablePage(ScriptStruct, InRows, InColumns, bFixedModeActive));
 			Pages.Add(NewPage);
 		}
 	}
@@ -698,7 +858,7 @@ FString UAffinityTable::StringIDForCell(const CellTags& InCell)
 	return FString::Printf(TEXT("%s|%s"), *InCell.Row.ToString(), *InCell.Column.ToString());
 }
 
-UAffinityTable::TagIndex UAffinityTable::GetIndex(const TMap<FGameplayTag, TagIndex>& InMap, const FGameplayTag& InTag, bool ExactMatch) const
+UAffinityTable::TagIndex UAffinityTable::GetIndex(const TMap<FGameplayTag, TagIndex>& InMap, const FGameplayTag& InTag, const bool ExactMatch)
 {
 	TagIndex Index = InvalidIndex;
 	if (InTag.IsValid())
@@ -717,13 +877,13 @@ UAffinityTable::TagIndex UAffinityTable::GetIndex(const TMap<FGameplayTag, TagIn
 	return Index;
 }
 
-void UAffinityTable::EnsureStructIsLoaded(UScriptStruct* ScriptStruct)
+void UAffinityTable::EnsureStructIsLoaded(UScriptStruct* ScriptStruct) const
 {
 	check(ScriptStruct);
 	if (!ScriptStruct->GetStructureSize() && ScriptStruct->HasAnyFlags(RF_NeedLoad))
 	{
-		auto Linker = ScriptStruct->GetLinker();
-		if (Linker && (!GEventDrivenLoaderEnabled || !EVENT_DRIVEN_ASYNC_LOAD_ACTIVE_AT_RUNTIME))
+		if (const auto Linker = ScriptStruct->GetLinker();
+			Linker && (!GEventDrivenLoaderEnabled || !EVENT_DRIVEN_ASYNC_LOAD_ACTIVE_AT_RUNTIME))
 		{
 			Linker->Preload(ScriptStruct);
 		}
@@ -732,13 +892,18 @@ void UAffinityTable::EnsureStructIsLoaded(UScriptStruct* ScriptStruct)
 			UE_LOG(LogAffinityTable, Error, TEXT("Structure %s on table %s failed to load on time"), *ScriptStruct->GetFName().ToString(), *GetPathName());
 		}
 	}
+
+	if (!IsValid(ScriptStruct))
+	{
+		UE_LOG(LogAffinityTable, Error, TEXT("AffinityTable::EnsureStructIsLoaded(...) failed to load a UScriptStruct."));
+	}
 }
 
-FAffinityTablePage* UAffinityTable::GetPageForStruct(const UScriptStruct* InScriptStruct)
+FAffinityTablePage* UAffinityTable::GetPageForStruct(const UScriptStruct* InScriptStruct) const
 {
 	if (InScriptStruct != nullptr)
 	{
-		TSharedRef<FAffinityTablePage>* RequestedPage = Pages.FindByPredicate([InScriptStruct](const TSharedRef<FAffinityTablePage>& Page) {
+		const TSharedRef<FAffinityTablePage>* RequestedPage = Pages.FindByPredicate([InScriptStruct](const TSharedRef<FAffinityTablePage>& Page) {
 			return Page->GetStruct() == InScriptStruct;
 		});
 		return RequestedPage ? &RequestedPage->Get() : nullptr;

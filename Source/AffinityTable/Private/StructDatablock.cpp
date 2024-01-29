@@ -1,5 +1,5 @@
 /**
- * Copyright 2022 Inflexion Games. All Rights Reserved.
+ * Copyright 2024 Inflexion Games. All Rights Reserved.
  *
  * Licensed under the Apache License, Version 2.0 (the "License");
  * you may not use this file except in compliance with the License.
@@ -14,17 +14,15 @@
  * limitations under the License.
  */
 
-
 #include "StructDatablock.h"
 #include "AffinityTable.h"
-#include "UObject/Class.h"
 
-FStructDatablock::FStructDatablock(const UScriptStruct* InStruct, const uint32 DesiredCapacity, bool AllocNow /* = false */) :
-	Struct(InStruct),
-	Datablock(nullptr),
-	Capacity(1),
-	StructSize(0),
-	NextHandle(InvalidHandle)
+FStructDatablock::FStructDatablock(const UScriptStruct* InStruct, const uint32 DesiredCapacity, bool AllocNow /* = false */)
+	: Struct(InStruct)
+	, Datablock(nullptr)
+	, Capacity(1)
+	, StructSize(0)
+	, NextHandle(InvalidHandle)
 {
 	check(DesiredCapacity);
 	StructName = Struct->GetFName();
@@ -107,19 +105,31 @@ void FStructDatablock::Dealloc()
 	{
 		// Our struct should NEVER be null here (since we used it to allocate the datablock)
 		// but we've seen our share of strange things in this world...
-		check(Struct);
+		check(!Struct.IsExplicitlyNull());
 
 		// Under rare circumstances, some cook or build processes may invalidate structs before destroying
 		// our owning AffinityTable. Calling UScriptStruct::DestroyStruct will crash the runtime.
 		// Catch and log those events. We run the risk of leaking any dependent properties but the
 		// process will survive. We still safely de-allocate the memory created by this block.
-		if (!Struct->GetFName().IsNone() && Struct->IsValidLowLevel())
+		if (Struct.IsValid() && Struct->IsValidLowLevel() && !Struct->GetFName().IsNone())
 		{
 			Struct->DestroyStruct(Datablock, Capacity);
 		}
 		else
 		{
-			UE_LOG(LogAffinityTable, Display, TEXT("Structure %s was deleted before its AffinityTable could free it"), *StructName.ToString());
+			if (Struct.IsStale())
+			{
+				UE_LOG(LogAffinityTable, Display, TEXT("UScriptStruct for [%s] was deleted before all StructDataBlocks in an AffinityTable were freed"), *StructName.ToString());
+			}
+			else if (Struct.IsStale(true))
+			{
+				UE_LOG(LogAffinityTable, Display, TEXT("UScriptStruct for [%s] was marked pending kill before all StructDataBlocks in an AffinityTable were freed"), *StructName.ToString());
+			}
+			else
+			{
+				// If we get here, something has gone terribly wrong with the weak pointer since it thinks it's pointing at a valid object
+				UE_LOG(LogAffinityTable, Error, TEXT("A UScriptStruct weak object pointer for [%s] is probably pointing at garbage memory."), *StructName.ToString());
+			}
 		}
 
 		FMemory::Free(Datablock);

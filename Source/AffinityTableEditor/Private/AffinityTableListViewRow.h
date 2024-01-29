@@ -1,5 +1,5 @@
 /**
- * Copyright 2022 Inflexion Games. All Rights Reserved.
+ * Copyright 2024 Inflexion Games. All Rights Reserved.
  *
  * Licensed under the Apache License, Version 2.0 (the "License");
  * you may not use this file except in compliance with the License.
@@ -13,8 +13,6 @@
  * See the License for the specific language governing permissions and
  * limitations under the License.
  */
-
-
 #pragma once
 
 #include "AffinityTable.h"
@@ -29,6 +27,7 @@
 class SAffinityTableListViewRow : public SMultiColumnTableRow<FAffinityTableNode::NodeSharedPtr>
 {
 public:
+	// -V:SLATE_BEGIN_ARGS:832, Constructor is obfuscated by macro
 	SLATE_BEGIN_ARGS(SAffinityTableListViewRow)
 	{
 	}

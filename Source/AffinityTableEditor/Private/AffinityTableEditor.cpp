@@ -1,5 +1,5 @@
 /**
- * Copyright 2022 Inflexion Games. All Rights Reserved.
+ * Copyright 2024 Inflexion Games. All Rights Reserved.
  *
  * Licensed under the Apache License, Version 2.0 (the "License");
  * you may not use this file except in compliance with the License.
@@ -13,7 +13,6 @@
  * See the License for the specific language governing permissions and
  * limitations under the License.
  */
-
 #include "AffinityTableEditor.h"
 #include "AffinityTable.h"
 #include "AffinityTableCell.h"
@@ -68,25 +67,33 @@ const FName FAffinityTableEditorTabs::TableViewportID(TEXT("Viewport"));
 const FName FAffinityTableEditorTabs::TablePropertiesID(TEXT("TableProperties"));
 const FName FAffinityTableEditor::ColumnHeaderName("AffinityTableRoot");
 
+namespace FAffinityTableEditorPrivate
+{
+const FString PreferenceSectionName(TEXT("AffinityTableEditor"));
+
+}
+
 // Tag Node Walkers
 //////////////////////////////////////////////////////////////////////////////////////
 
 /**
  * Gathers all visible nodes in the provided tree.
- * Visible nodes are added to the provided array. The root node is assumed visible. 
+ * Visible nodes are added to the provided array. The root node is assumed visible.
  */
 class FVisibleNodeWalker : public IAffinityTableNodeWalker
 {
 public:
-	FVisibleNodeWalker(TArray<FAffinityTableNode::NodeSharedPtr>& InAvailableNodes) :
-		AvailableNodes(InAvailableNodes)
+	FVisibleNodeWalker(TArray<FAffinityTableNode::NodeSharedPtr>& InAvailableNodes)
+		: AvailableNodes(InAvailableNodes)
 	{
 	}
+
+	virtual ~FVisibleNodeWalker() override = default;
 
 protected:
 	virtual bool Visit(TWeakPtr<FAffinityTableNode>& InNode) override
 	{
-		FAffinityTableNode::NodeSharedPtr Ptr = InNode.Pin();
+		const FAffinityTableNode::NodeSharedPtr Ptr = InNode.Pin();
 		if (Ptr->GetTag().IsValid())
 		{
 			AvailableNodes.Add(Ptr);
@@ -104,15 +111,14 @@ private:
 class FFindNodeWalker : public IAffinityTableNodeWalker
 {
 public:
-	FFindNodeWalker(const FGameplayTag& InTag, FAffinityTableNode* Root) :
-		FoundNode(nullptr),
-		Tag(InTag)
+	FFindNodeWalker(const FGameplayTag& InTag)
+		: FoundNode(nullptr)
+		, Tag(InTag)
 	{
-		Walk(Root);
 	}
 
 	/** Retrieves the search result, if any. Null otherwise */
-	const FAffinityTableNode* GetFoundNode()
+	const FAffinityTableNode* GetFoundNode() const
 	{
 		return FoundNode;
 	}
@@ -134,31 +140,31 @@ private:
 };
 
 /**
- * Fills a list with cells underneath the provided column, following data inheritance rules. 
+ * Fills a list with cells underneath the provided column, following data inheritance rules.
  */
 class FFillColumnDownWalker : public IAffinityTableNodeWalker
 {
 public:
-	FFillColumnDownWalker(FAffinityTableEditor* InEditor, const FAffinityTableNode* InColumn, TArray<TWeakPtr<FAffinityTableEditor::Cell>>& OutCells, bool InForce) :
-		Editor(InEditor),
-		Column(InColumn),
-		Cells(OutCells),
-		Force(InForce)
+	FFillColumnDownWalker(FAffinityTableEditor* InEditor, const FAffinityTableNode* InColumn, TArray<TWeakPtr<FAffinityTableEditor::Cell>>& OutCells, bool InForce)
+		: Editor(InEditor)
+		, Column(InColumn)
+		, Cells(OutCells)
+		, Force(InForce)
 	{
 	}
 
-	virtual ~FFillColumnDownWalker(){};
+	virtual ~FFillColumnDownWalker() override = default;
 
 protected:
 	virtual bool Visit(FAffinityTableNode* Row) override
 	{
 		check(Row);
 
-		TSharedPtr<FAffinityTableEditor::Cell> ThisCell = Editor->GetCell(Row, Column).Pin();
+		const TSharedPtr<FAffinityTableEditor::Cell> ThisCell = Editor->GetCell(Row, Column).Pin();
 		check(ThisCell.IsValid());
 
 		// This cell is fair game if it is open (inheriting) and previously linked to our parent, or NOT linked to a cell in this row
-		FAffinityTableEditor::Cell* InheritedCell = ThisCell->InheritsData() ? ThisCell->InheritedCell.Pin().Get() : nullptr;
+		const FAffinityTableEditor::Cell* InheritedCell = ThisCell->InheritsData() ? ThisCell->InheritedCell.Pin().Get() : nullptr;
 		if (Force || (InheritedCell && (InheritedCell->Row->GetTag() != Row->GetTag())))
 		{
 			Cells.Add(ThisCell);
@@ -185,10 +191,10 @@ public:
 	FStaleNodeWalker(TArray<TWeakPtr<FAffinityTableNode>>& InResults,
 		FAffinityTableNode::IndexGenerator InIndexCallback,
 		FAffinityTableNode::NewNodeCallback InUpdateCallback,
-		TWeakPtr<FAffinityTableNode> StartNode) :
-		IndexCallback(InIndexCallback),
-		UpdateCallback(InUpdateCallback),
-		Results(InResults)
+		TWeakPtr<FAffinityTableNode> StartNode)
+		: IndexCallback(InIndexCallback)
+		, UpdateCallback(InUpdateCallback)
+		, Results(InResults)
 	{
 		Walk(StartNode);
 	}
@@ -211,9 +217,7 @@ public:
 		return true;
 	}
 
-	virtual ~FStaleNodeWalker()
-	{
-	}
+	virtual ~FStaleNodeWalker() override = default;
 
 private:
 	FAffinityTableNode::IndexGenerator IndexCallback;
@@ -231,7 +235,7 @@ private:
 class SAffinityTableColumnHeader : public SAffinityTableHeader
 {
 protected:
-	virtual void OnConstruct()
+	virtual void OnConstruct() override
 	{
 		FAffinityTableNode::NodeSharedPtr Ptr = Node.Pin();
 
@@ -239,11 +243,11 @@ protected:
 		TArray<FLinearColor> Colors;
 		GatherUpstreamColors(Colors);
 
-		int32 HandleCount = Colors.Num();
-		float CellMargin = FAffinityTableStyles::ColCellMargin;
+		const int32 HandleCount = Colors.Num();
+		const float CellMargin = FAffinityTableStyles::ColCellMargin;
 
 		// Vertical box with colors, plus that of our parents
-		TSharedRef<SVerticalBox> HandleHolder = SNew(SVerticalBox);
+		const TSharedRef<SVerticalBox> HandleHolder = SNew(SVerticalBox);
 		while (Colors.Num())
 		{
 			HandleHolder->AddSlot()
@@ -252,7 +256,7 @@ protected:
 		}
 
 		// An overlay to contain all of our components
-		TSharedRef<SOverlay> ColOverlay = SNew(SOverlay);
+		const TSharedRef<SOverlay> ColOverlay = SNew(SOverlay);
 
 		// Vertical bar if we are open
 		if (!Ptr->IsCollapsed() && Ptr->HasChildren())
@@ -271,24 +275,24 @@ protected:
 								  .HAlign(HAlign_Fill)
 								  .VAlign(VAlign_Fill)[SNew(STextBlock)
 														   .Margin(FMargin(CellMargin * 2, CellMargin + FAffinityTableStyles::ColHeaderColorHeight * HandleCount, CellMargin, CellMargin))
-														   .Text(FText::FromName(Ptr->GetTag().GetTagName()))]];
+														   .Text(MakeHeaderName())]];
 
 		ChildSlot[ColOverlay];
 	}
 
-	virtual void OnDeleteHeader()
+	virtual void OnDeleteHeader() override
 	{
-		FText WarningMessage(LOCTEXT("AT_Warning_DeleteCol", "Are you sure you want to delete this column?"));
+		const FText WarningMessage(LOCTEXT("AT_Warning_DeleteCol", "Are you sure you want to delete this column?"));
 		if (EAppReturnType::Yes == FMessageDialog::Open(EAppMsgType::YesNo, WarningMessage))
 		{
 			const FScopedTransaction Transaction(LOCTEXT("AT_Transaction_DeleteColumn", "Delete Column"));
-			TSharedPtr<FAffinityTableEditor> EditorPtr = Editor.Pin();
+			const TSharedPtr<FAffinityTableEditor> EditorPtr = Editor.Pin();
 			EditorPtr->GetTableBeingEdited()->Modify();
 			EditorPtr->DeleteColumn(Node);
 		}
 	}
 
-	virtual void OnSetColor()
+	virtual void OnSetColor() override
 	{
 		Editor.Pin()->PickColorForHeader(this, false);
 	}
@@ -322,21 +326,44 @@ public:
 	};
 
 private:
-	FAffinityTableEditor* Editor;
+	FAffinityTableEditor* Editor{ nullptr };
 };
 
 //////////////////////////////////////////////////////////////////////////////////////
 
-FAffinityTableEditor::FAffinityTableEditor() :
-	TableBeingEdited(nullptr),
-	CellSelectionType(ECellSelectionType::Single),
-	SelectedTagIsRow(false)
+const FAffinityTablePreferences* UAffinityTableEditorPreferences::GetPreferencesForTable(const FName& TableName) const
+{
+	if (const FAffinityTablePreferences* Preferences = TablePreferences.Find(TableName))
+	{
+		return Preferences;
+	}
+	return nullptr;
+}
+
+void UAffinityTableEditorPreferences::SetPreferencesForTable(const FName& TableName, const FAffinityTablePreferences& Preferences)
+{
+	TablePreferences.Add(TableName, Preferences);
+}
+
+FAffinityTableEditor::FAffinityTableEditor()
+	: TableBeingEdited(nullptr)
+	, CellSelectionType(ECellSelectionType::Single)
+	, SelectedTagIsRow(false)
 {
 	GEditor->RegisterForUndo(this);
+
+	// New/restored preferences
+	EditorPreferences = TStrongObjectPtr(NewObject<UAffinityTableEditorPreferences>());
+	EditorPreferences->LoadConfig();
 }
 
 FAffinityTableEditor::~FAffinityTableEditor()
 {
+	SaveTablePreferences();
+
+	check(EditorPreferences);
+	EditorPreferences->SaveConfig();
+
 	GEditor->UnregisterForUndo(this);
 }
 
@@ -369,24 +396,24 @@ FLinearColor FAffinityTableEditor::GetWorldCentricTabColorScale() const
 void FAffinityTableEditor::RegisterTabSpawners(const TSharedRef<class FTabManager>& InTabManager)
 {
 	WorkspaceMenuCategory = InTabManager->AddLocalWorkspaceMenuCategory(LOCTEXT("AT_WorkspaceMenu", "Affinity Table Editor"));
-	auto WorkspaceMenuCategoryRef = WorkspaceMenuCategory.ToSharedRef();
+	const auto WorkspaceMenuCategoryRef = WorkspaceMenuCategory.ToSharedRef();
 
 	FAssetEditorToolkit::RegisterTabSpawners(InTabManager);
 
 	InTabManager->RegisterTabSpawner(FAffinityTableEditorTabs::TableViewportID, FOnSpawnTab::CreateSP(this, &FAffinityTableEditor::SpawnTableWidgetTab))
 		.SetDisplayName(LOCTEXT("AT_PropertiesTabViewport", "Table"))
 		.SetGroup(WorkspaceMenuCategoryRef)
-		.SetIcon(FSlateIcon(FEditorStyle::GetStyleSetName(), "LevelEditor.Tabs.Viewports"));
+		.SetIcon(FSlateIcon(FAppStyle::GetAppStyleSetName(), "LevelEditor.Tabs.Viewports"));
 
 	InTabManager->RegisterTabSpawner(FAffinityTableEditorTabs::CellPropertiesID, FOnSpawnTab::CreateSP(this, &FAffinityTableEditor::SpawnCellPropertiesTab))
 		.SetDisplayName(LOCTEXT("AT_PropertiesTabCell", "Cell Properties"))
 		.SetGroup(WorkspaceMenuCategoryRef)
-		.SetIcon(FSlateIcon(FEditorStyle::GetStyleSetName(), "LevelEditor.Tabs.Details"));
+		.SetIcon(FSlateIcon(FAppStyle::GetAppStyleSetName(), "LevelEditor.Tabs.Details"));
 
 	InTabManager->RegisterTabSpawner(FAffinityTableEditorTabs::TablePropertiesID, FOnSpawnTab::CreateSP(this, &FAffinityTableEditor::SpawnTablePropertiesTab))
 		.SetDisplayName(LOCTEXT("AT_PropertiesTabTable", "Table Properties"))
 		.SetGroup(WorkspaceMenuCategoryRef)
-		.SetIcon(FSlateIcon(FEditorStyle::GetStyleSetName(), "LevelEditor.Tabs.Details"));
+		.SetIcon(FSlateIcon(FAppStyle::GetAppStyleSetName(), "LevelEditor.Tabs.Details"));
 }
 
 void FAffinityTableEditor::UnregisterTabSpawners(const TSharedRef<class FTabManager>& InTabManager)
@@ -457,6 +484,9 @@ void FAffinityTableEditor::InitAffinityTableEditor(const EToolkitMode::Type Mode
 		InsertColumn(Column.Key);
 	}
 
+	// Load settings for this table
+	LoadTablePreferences();
+
 	// Handle initial page update
 	if (PageViews.Num())
 	{
@@ -472,11 +502,11 @@ void FAffinityTableEditor::InitAffinityTableEditor(const EToolkitMode::Type Mode
 																			 // Toolbar area
 																			 FTabManager::NewPrimaryArea()
 																				 ->SetOrientation(Orient_Vertical)
-																				 ->Split(
-																					 FTabManager::NewStack()
-																						 ->SetSizeCoefficient(0.1f)
-																						 ->SetHideTabWell(true)
-																						 ->AddTab(GetToolbarTabId(), ETabState::OpenedTab))
+																				 // ->Split(
+																				 //  FTabManager::NewStack()
+																				 // 	 ->SetSizeCoefficient(0.1f)
+																				 // 	 ->SetHideTabWell(true)
+																				 // 	 ->AddTab(GetToolbarTabId(), ETabState::OpenedTab))
 																				 // Editor content area
 																				 ->Split(
 																					 // Split the tab and pass the tab id to the tab spawner
@@ -507,13 +537,10 @@ void FAffinityTableEditor::InitAffinityTableEditor(const EToolkitMode::Type Mode
 																												 ->SetSizeCoefficient(0.75f)
 																												 ->AddTab(FAffinityTableEditorTabs::CellPropertiesID, ETabState::OpenedTab))))));
 
-	// Table properties
-	const bool bIsUpdatable = false;
-	const bool bIsLockable = false;
-	const bool bAllowFavorites = true;
-
 	FPropertyEditorModule& PropertyEditorModule = FModuleManager::GetModuleChecked<FPropertyEditorModule>("PropertyEditor");
-	const FDetailsViewArgs TableDetailsViewArgs(/*bUpdateFromSelection=*/false, /*bLockable=*/false, /*bAllowSearch=*/false, /*InNameAreaSettings=*/FDetailsViewArgs::HideNameArea, /*bHideSelectionTip=*/true);
+	FDetailsViewArgs TableDetailsViewArgs;
+	TableDetailsViewArgs.bAllowSearch = false;
+	TableDetailsViewArgs.NameAreaSettings = FDetailsViewArgs::HideNameArea;
 	const FStructureDetailsViewArgs StructureDetailsViewArgs;
 
 	DetailsView = PropertyEditorModule.CreateStructureDetailView(TableDetailsViewArgs, StructureDetailsViewArgs, nullptr);
@@ -533,11 +560,20 @@ void FAffinityTableEditor::InitAffinityTableEditor(const EToolkitMode::Type Mode
 		true,
 		true,
 		(UObject*) Table);
+
+	// After loading, check if there were any errors
+	if (Table->HasLoadingErrors())
+	{
+		const FText Message(LOCTEXT("AT_Loading_Errors",
+			"This table contains one or more important data errors or warnings, and its integrity is compromised. Some rows and columns could now be wrong or missing. "
+			"Please consult the logs to review the problems and its possible solutions"));
+		FMessageDialog::Open(EAppMsgType::Ok, Message);
+	}
 }
 
 void FAffinityTableEditor::ExtendToolbar()
 {
-	TSharedPtr<FExtender> ToolbarExtender = MakeShareable(new FExtender);
+	const TSharedPtr<FExtender> ToolbarExtender = MakeShareable(new FExtender);
 	ToolbarExtender->AddToolBarExtension(
 		"Asset",
 		EExtensionHook::After,
@@ -552,7 +588,7 @@ void FAffinityTableEditor::FillToolbar(FToolBarBuilder& ToolbarBuilder)
 	check(TableBeingEdited);
 	ToolbarBuilder.BeginSection("AffinityTableEditorCommands");
 	{
-		// You must have columns and a valid page before adding rows. 
+		// You must have columns and a valid page before adding rows.
 		ToolbarBuilder.AddToolBarButton(
 			FUIAction(
 				FExecuteAction::CreateLambda([this]() {
@@ -564,7 +600,7 @@ void FAffinityTableEditor::FillToolbar(FToolBarBuilder& ToolbarBuilder)
 			NAME_None,
 			LOCTEXT("AT_AddRow_Text", "Add Row"),
 			LOCTEXT("AT_AddRow_Tooltip", "Add a new row to the grid"),
-			FSlateIcon(FEditorStyle::GetStyleSetName(), "DataTableEditor.Add"));
+			FSlateIcon(FAppStyle::GetAppStyleSetName(), "DataTableEditor.Add"));
 
 		// You must have a valid page before adding columns
 		ToolbarBuilder.AddToolBarButton(
@@ -578,7 +614,7 @@ void FAffinityTableEditor::FillToolbar(FToolBarBuilder& ToolbarBuilder)
 			NAME_None,
 			LOCTEXT("AT_AddColumn_Text", "Add Column"),
 			LOCTEXT("AT_AddColumn_Tooltip", "Add a new column to the grid"),
-			FSlateIcon(FEditorStyle::GetStyleSetName(), "DataTableEditor.Add"));
+			FSlateIcon(FAppStyle::GetAppStyleSetName(), "DataTableEditor.Add"));
 
 		ToolbarBuilder.AddToolBarButton(
 			FUIAction(FExecuteAction::CreateLambda([this]() { ResetTableInheritance(); })),
@@ -592,10 +628,9 @@ void FAffinityTableEditor::FillToolbar(FToolBarBuilder& ToolbarBuilder)
 
 TSharedRef<ITableRow> FAffinityTableEditor::OnGenerateRow(TSharedPtr<FGameplayTagNode> InItem, const TSharedRef<STableViewBase>& OwnerTable)	// -V813 (cannot change UE-defined signature)
 {
-	FText TooltipText;
-
+	const FText TooltipText;
 	return SNew(STableRow<TSharedPtr<FGameplayTagNode>>, OwnerTable)
-		.Style(FEditorStyle::Get(), "GameplayTagTreeView")
+		.Style(FAppStyle::Get(), "GameplayTagTreeView")
 			[SNew(SHorizontalBox)
 
 				// Normal Tag Display (management mode only)
@@ -640,7 +675,7 @@ void FAffinityTableEditor::InsertRow(const FGameplayTag& Tag)
 			FLambdaWalker AddColumnsWalker([this, NewNodePtr, &NewCells](TWeakPtr<FAffinityTableNode> Column) {
 				FAffinityTableNode* ColumnPtr = Column.Pin().Get();
 
-				TSharedRef<Cell> NewCell = MakeShareable(new Cell());
+				const TSharedRef<Cell> NewCell = MakeShareable(new Cell());
 				NewCell->TableCell = UAffinityTable::Cell{ NewNodePtr->GetTagIndex(), ColumnPtr->GetTagIndex() };
 				NewCell->Row = NewNodePtr;
 				NewCell->Column = ColumnPtr;
@@ -660,10 +695,15 @@ void FAffinityTableEditor::InsertRow(const FGameplayTag& Tag)
 		});
 
 	// Now that all dependents have been added, link them to their inheriting cells
+	TArray<TWeakPtr<Cell>> CellsToUpdate;
+	CellsToUpdate.Reserve(NewCells.Num());
 	for (TSharedRef<Cell>& ThisCell : NewCells)
 	{
 		AssignInheritance(ThisCell, false, true);
+		CellsToUpdate.Add(ThisCell);
 	}
+	// Finally, refresh changes
+	UpdateCells(CellDataInheritance | CellDescription, &CellsToUpdate);
 }
 
 void FAffinityTableEditor::InsertColumn(const FGameplayTag& Tag)
@@ -691,7 +731,7 @@ void FAffinityTableEditor::InsertColumn(const FGameplayTag& Tag)
 			}
 
 			// Columns must cache their indexes for quicker lookups when re-generating our table.
-			FName Name = NewNodePtr->GetTag().GetTagName();
+			const FName Name = NewNodePtr->GetTag().GetTagName();
 			if (!this->ColumnNodes.Contains(Name))
 			{
 				this->ColumnNodes.Add(Name, NewNode);
@@ -709,10 +749,15 @@ void FAffinityTableEditor::InsertColumn(const FGameplayTag& Tag)
 		});
 
 	// Now that all dependents have been added, link them to their inheriting cells
+	TArray<TWeakPtr<Cell>> CellsToUpdate;
+	CellsToUpdate.Reserve(NewCells.Num());
 	for (TSharedRef<Cell>& ThisCell : NewCells)
 	{
 		AssignInheritance(ThisCell, true, true);
+		CellsToUpdate.Add(ThisCell);
 	}
+	// Finally, refresh changes
+	UpdateCells(CellDataInheritance | CellDescription, &CellsToUpdate);
 }
 
 FReply FAffinityTableEditor::OnAddTag()
@@ -722,7 +767,7 @@ FReply FAffinityTableEditor::OnAddTag()
 
 	if ((SelectedTagIsRow ? TableBeingEdited->GetRowIndex(SelectedTag) : TableBeingEdited->GetColumnIndex(SelectedTag)) != UAffinityTable::InvalidIndex)
 	{
-		FText Message(LOCTEXT("AT_Warning_Existing", "The tag you selected already exists on the table, please pick a different one"));
+		const FText Message(LOCTEXT("AT_Warning_Existing", "The tag you selected already exists on the table, please pick a different one"));
 		FMessageDialog::Open(EAppMsgType::Ok, Message);
 		return FReply::Handled();
 	}
@@ -761,12 +806,12 @@ void FAffinityTableEditor::OnTagSelectionChanged(TSharedPtr<FGameplayTagNode> In
 void FAffinityTableEditor::DisplayGameTagPicker(bool PickRow)
 {
 	SelectedTagIsRow = PickRow;
-	TSharedRef<SWindow> NewWindow = SNew(SWindow)
-										.Title(LOCTEXT("AT_GametagPicker_Title", "Select a tag"))
-										.SizingRule(ESizingRule::UserSized)
-										.ClientSize(FVector2D(600, 430))
-										.SupportsMaximize(true)
-										.SupportsMinimize(false);
+	const TSharedRef<SWindow> NewWindow = SNew(SWindow)
+											  .Title(LOCTEXT("AT_GametagPicker_Title", "Select a tag"))
+											  .SizingRule(ESizingRule::UserSized)
+											  .ClientSize(FVector2D(600, 430))
+											  .SupportsMaximize(true)
+											  .SupportsMinimize(false);
 
 	AddTagWindow = NewWindow;
 
@@ -781,7 +826,7 @@ void FAffinityTableEditor::DisplayGameTagPicker(bool PickRow)
 							.SelectionMode(ESelectionMode::Single);
 
 		AddTagWidget = SNew(SBorder)
-						   .BorderImage(FEditorStyle::GetBrush("ToolPanel.GroupBorder"))
+						   .BorderImage(FAppStyle::GetBrush("ToolPanel.GroupBorder"))
 							   [SNew(SVerticalBox)
 
 								   // Tag filter
@@ -1124,7 +1169,7 @@ FSlateColor FAffinityTableEditor::GetVisibilityBtnForeground() const
 	static const FName InvertedForegroundName("InvertedForeground");
 	static const FName DefaultForegroundName("DefaultForeground");
 
-	return VisibilityComboButton->IsHovered() ? FEditorStyle::GetSlateColor(InvertedForegroundName) : FEditorStyle::GetSlateColor(DefaultForegroundName);
+	return VisibilityComboButton->IsHovered() ? FAppStyle::GetSlateColor(InvertedForegroundName) : FAppStyle::GetSlateColor(DefaultForegroundName);
 }
 
 void FAffinityTableEditor::TogglePropertyVisibility(const FProperty* Property)
@@ -1142,6 +1187,7 @@ void FAffinityTableEditor::UpdateCells(CellUpdateType UpdateTypes, TArray<TWeakP
 	if (ActivePageView.IsValid())
 	{
 		PageView* CurrentView = ActivePageView.Get();
+		bool AssetNeedsSave = false;
 
 		// Cache a list of visible properties
 		if (UpdateTypes & CellVisibleFields)
@@ -1183,16 +1229,18 @@ void FAffinityTableEditor::UpdateCells(CellUpdateType UpdateTypes, TArray<TWeakP
 		}
 
 		// Enact data inheritance
-		if (UpdateTypes & CellData)
+		if (UpdateTypes & CellDataInheritance)
 		{
-			UpdateOps.Add([this, CurrentView](Cell* ThisCell, TSharedPtr<Cell>& ThisCellPtr) {
-				if (ThisCell->InheritsData())
+			UpdateOps.Add([this, CurrentView, &AssetNeedsSave](Cell* ThisCell, TSharedPtr<Cell>& ThisCellPtr) {
+				if (ThisCell->InheritsData() &&
+					!TableBeingEdited->AreCellsIdentical(CurrentView->PageStruct, ThisCell->InheritedCell.Pin()->TableCell, ThisCell->TableCell))
 				{
-					uint8* DataFrom = TableBeingEdited->GetCellData(ThisCell->InheritedCell.Pin()->TableCell, CurrentView->PageStruct);
+					const uint8* DataFrom = TableBeingEdited->GetCellData(ThisCell->InheritedCell.Pin()->TableCell, CurrentView->PageStruct);
 					uint8* DataTo = TableBeingEdited->GetCellData(ThisCell->TableCell, CurrentView->PageStruct);
 					check(DataFrom && DataTo);
 
 					CurrentView->PageStruct->CopyScriptStruct(DataTo, DataFrom);
+					AssetNeedsSave = true;
 				}
 			});
 		}
@@ -1241,6 +1289,12 @@ void FAffinityTableEditor::UpdateCells(CellUpdateType UpdateTypes, TArray<TWeakP
 				}
 			}
 		}
+
+		// Mark the asset as dirty if any of the above operations require a save
+		if (AssetNeedsSave)
+		{
+			GetTableBeingEdited()->MarkPackageDirty();
+		}
 	}
 }
 
@@ -1256,6 +1310,9 @@ void FAffinityTableEditor::OnCellValueChanged(TWeakPtr<Cell>& UpdatedCell)
 {
 	check(UpdatedCell.IsValid());
 	TSharedPtr<Cell> UpdatedCellRef = UpdatedCell.Pin();
+
+	// No matter what we do, this is now a modified document
+	TableBeingEdited->Modify();
 
 	// If this cell is inheriting data, mark it independent and update the inheritance chain, otherwise
 	// update and make sure the data makes it to the inherited cells
@@ -1273,11 +1330,11 @@ void FAffinityTableEditor::OnCellValueChanged(TWeakPtr<Cell>& UpdatedCell)
 
 		TArray<TWeakPtr<Cell>> InheritingCells;
 		GatherInheritedCells(UpdatedCell, InheritingCells);
-		UpdateCells(CellData | CellDescription, &InheritingCells);
+		UpdateCells(CellDataInheritance | CellDescription, &InheritingCells);
 	}
 }
 
-bool FAffinityTableEditor::IsPropertyVisible(const FProperty* Property)
+bool FAffinityTableEditor::IsPropertyVisible(const FProperty* Property) const
 {
 	check(ActivePageView.IsValid());
 	check(ActivePageView->CellVisibility.Contains(Property));
@@ -1413,7 +1470,7 @@ void FAffinityTableEditor::AcquireInheritance(TWeakPtr<Cell>& InCell, bool Colum
 
 		// Refresh visuals and data for everyone, including ourselves
 		InheritedCells.Add(InCell);
-		UpdateCells(CellData | CellDescription, &InheritedCells);
+		UpdateCells(CellDataInheritance | CellDescription, &InheritedCells);
 	}
 }
 
@@ -1430,7 +1487,7 @@ void FAffinityTableEditor::PropagateInheritance(TWeakPtr<Cell>& InCell, bool For
 
 	// Update the values of the newly inherited cells, and ours
 	NewInheritedCells.Add(InCell);
-	UpdateCells(CellData | CellDescription, &NewInheritedCells);
+	UpdateCells(CellDataInheritance | CellDescription, &NewInheritedCells);
 }
 
 void FAffinityTableEditor::GatherInheritedCells(TWeakPtr<Cell>& InCell, TArray<TWeakPtr<Cell>>& OutCells, bool Force /* = false */)
@@ -1459,7 +1516,7 @@ void FAffinityTableEditor::GatherInheritedCells(TWeakPtr<Cell>& InCell, TArray<T
 			check(ThisCell.IsValid());
 
 			// This cell is fair game if it is open (inheriting) and either already ours, or NOT parented to another in the same column
-			Cell* InheritedCell = ThisCell->InheritsData() ? ThisCell->InheritedCell.Pin().Get() : nullptr;
+			const Cell* InheritedCell = ThisCell->InheritsData() ? ThisCell->InheritedCell.Pin().Get() : nullptr;
 			if ((InheritedCell && (InheritedCell == ParentCell || InheritedCell->Column->GetTag() != Column->GetTag())) || Force)
 			{
 				OutCells.Add(ThisCell);
@@ -1477,8 +1534,8 @@ void FAffinityTableEditor::GatherCellsBetween(TWeakPtr<Cell>& CornerA, TWeakPtr<
 {
 	check(CornerA.IsValid() && CornerB.IsValid());
 
-	TSharedPtr<Cell> ARef = CornerA.Pin();
-	TSharedPtr<Cell> BRef = CornerB.Pin();
+	const TSharedPtr<Cell> ARef = CornerA.Pin();
+	const TSharedPtr<Cell> BRef = CornerB.Pin();
 
 	// Organize coordinates so we go from (left/top) to (right/bottom)
 	FAffinityTableNode* Ax = ARef->Column;
@@ -1505,10 +1562,10 @@ void FAffinityTableEditor::GatherCellsBetween(TWeakPtr<Cell>& CornerA, TWeakPtr<
 	ColumnWalker.Walk(ColumnRoot);
 
 	// Get selection boundaries
-	int32 Ayi = AvailableRows.IndexOfByPredicate([Ay](const FAffinityTableNode::NodeSharedPtr& ThisRow) { return ThisRow->GetTag() == Ay->GetTag(); });
-	int32 Ayf = AvailableRows.IndexOfByPredicate([By](const FAffinityTableNode::NodeSharedPtr& ThisRow) { return ThisRow->GetTag() == By->GetTag(); });
-	int32 Axi = AvailableColumns.IndexOfByPredicate([Ax](const FAffinityTableNode::NodeSharedPtr& ThisColumn) { return ThisColumn->GetTag() == Ax->GetTag(); });
-	int32 Axf = AvailableColumns.IndexOfByPredicate([Bx](const FAffinityTableNode::NodeSharedPtr& ThisColumn) { return ThisColumn->GetTag() == Bx->GetTag(); });
+	const int32 Ayi = AvailableRows.IndexOfByPredicate([Ay](const FAffinityTableNode::NodeSharedPtr& ThisRow) { return ThisRow->GetTag() == Ay->GetTag(); });
+	const int32 Ayf = AvailableRows.IndexOfByPredicate([By](const FAffinityTableNode::NodeSharedPtr& ThisRow) { return ThisRow->GetTag() == By->GetTag(); });
+	const int32 Axi = AvailableColumns.IndexOfByPredicate([Ax](const FAffinityTableNode::NodeSharedPtr& ThisColumn) { return ThisColumn->GetTag() == Ax->GetTag(); });
+	const int32 Axf = AvailableColumns.IndexOfByPredicate([Bx](const FAffinityTableNode::NodeSharedPtr& ThisColumn) { return ThisColumn->GetTag() == Bx->GetTag(); });
 
 	if (Axf != INDEX_NONE && Ayf != INDEX_NONE && Axi <= Axf && Ayi <= Ayf)
 	{
@@ -1532,7 +1589,7 @@ void FAffinityTableEditor::GatherCellsBetween(TWeakPtr<Cell>& CornerA, TWeakPtr<
 
 void FAffinityTableEditor::ResetTableInheritance()
 {
-	FText WarningMessage(LOCTEXT("AT_Warning_Reset", "This will delete data in your table and cannot be undone. It is meant for debug purposes only! Proceed?"));
+	const FText WarningMessage(LOCTEXT("AT_Warning_Reset", "This will delete data in your table and cannot be undone. It is meant for debug purposes only! Proceed?"));
 	if (EAppReturnType::Yes == FMessageDialog::Open(EAppMsgType::YesNo, WarningMessage))
 	{
 		// Each [top-level row, top-level column] is the topmost-lefmost node of a sub-table in our asset
@@ -1559,7 +1616,7 @@ void FAffinityTableEditor::AssignInheritance(TWeakPtr<Cell> InCell, bool ColumnS
 	check(TableBeingEdited);
 	check(ActivePageView.IsValid());
 
-	TSharedPtr<Cell> InCellPtr = InCell.Pin();
+	const TSharedPtr<Cell> InCellPtr = InCell.Pin();
 	check(InCellPtr->Row && InCellPtr->Column);
 
 	const FAffinityTableNode* ParentRow = nullptr;
@@ -1579,11 +1636,15 @@ void FAffinityTableEditor::AssignInheritance(TWeakPtr<Cell> InCell, bool ColumnS
 				return;
 			}
 
-			FFindNodeWalker FindRow(AssetInheritance.Row, RowRoot.Get());
-			FFindNodeWalker FindColumn(AssetInheritance.Column, ColumnRoot.Get());
+			FFindNodeWalker FindRow(AssetInheritance.Row);
+			FindRow.Walk(RowRoot.Get());
+
+			FFindNodeWalker FindColumn(AssetInheritance.Column);
+			FindColumn.Walk(ColumnRoot.Get());
+
 			check(FindRow.GetFoundNode() && FindColumn.GetFoundNode());
 
-			TWeakPtr<Cell> ParentCell = GetCell(FindRow.GetFoundNode(), FindColumn.GetFoundNode());
+			const TWeakPtr<Cell> ParentCell = GetCell(FindRow.GetFoundNode(), FindColumn.GetFoundNode());
 			if (ParentCell.IsValid())
 			{
 				// See note above for previous assignation if InheritedCell
@@ -1668,6 +1729,63 @@ void FAffinityTableEditor::UnlinkCell(TWeakPtr<Cell>& InCell)
 
 	InCellPtr->InheritedCell.Reset();
 	TableBeingEdited->RemoveInheritanceLink(ActivePageView->PageStruct, InCellPtr->AsCellTags());
+}
+
+void FAffinityTableEditor::LoadTablePreferences() const
+{
+	check(EditorPreferences);
+	if (IsValid(TableBeingEdited))
+	{
+		if (const FAffinityTablePreferences* Preferences =
+				EditorPreferences->GetPreferencesForTable(TableBeingEdited->GetFName()))
+		{
+			const TSet<FName>* CollapsedNodes = nullptr;
+			FLambdaWalker ApplyNodePreferences([&CollapsedNodes](TWeakPtr<FAffinityTableNode> Node) {
+				check(CollapsedNodes);
+				const auto& NodeRef = Node.Pin();
+				if (CollapsedNodes->Contains(NodeRef->GetTag().GetTagName()))
+				{
+					NodeRef->SetCollapsed(true);
+				}
+				return true;
+			});
+
+			CollapsedNodes = &Preferences->CR;
+			ApplyNodePreferences.Walk(RowRoot);
+
+			CollapsedNodes = &Preferences->CC; // -V519 We re-assign CollapsedNodes so the lambda walker can re-use it.
+			ApplyNodePreferences.Walk(ColumnRoot);
+		}
+	}
+}
+
+void FAffinityTableEditor::SaveTablePreferences() const
+{
+	check(EditorPreferences);
+
+	if (IsValid(TableBeingEdited))
+	{
+		TSet<FName> CollapsedNodes;
+		FLambdaWalker RecordCollapsedNodes([&CollapsedNodes](TWeakPtr<FAffinityTableNode> Node) {
+			const auto& NodeRef = Node.Pin();
+			if (NodeRef->IsCollapsed())
+			{
+				CollapsedNodes.Add(NodeRef->GetTag().GetTagName());
+			}
+			return true;
+		});
+
+		RecordCollapsedNodes.Walk(RowRoot);
+
+		FAffinityTablePreferences Preferences;
+		Preferences.CR = CollapsedNodes;
+
+		CollapsedNodes.Empty();
+		RecordCollapsedNodes.Walk(ColumnRoot);
+		Preferences.CC = CollapsedNodes;
+
+		EditorPreferences->SetPreferencesForTable(TableBeingEdited->GetFName(), Preferences);
+	}
 }
 
 TSharedRef<SWidget> FAffinityTableEditor::GetVisibilityBtnContent()
@@ -1783,7 +1901,7 @@ void FAffinityTableEditor::UpdatePageSet()
 		}
 
 		// Reassign current page: same view, first available view, or none.
-		TSharedPtr<PageView>* NewCurrentView = PageViews.FindByPredicate([ActiveStruct](TSharedPtr<PageView>& Page) { return Page->PageStruct == ActiveStruct; });
+		const TSharedPtr<PageView>* NewCurrentView = PageViews.FindByPredicate([ActiveStruct](TSharedPtr<PageView>& Page) { return Page->PageStruct == ActiveStruct; });
 		HandlePageComboChanged(NewCurrentView ? *NewCurrentView : PageViews.Num() ? PageViews[0] : TSharedPtr<PageView>(), ESelectInfo::Direct);
 	}
 }
@@ -1809,7 +1927,7 @@ void FAffinityTableEditor::ResyncAsset()
 		RowRoot);
 
 	HasDeletes |= StaleNodes.Num() > 0;
-	for (TWeakPtr<FAffinityTableNode> Node : StaleNodes)
+	for (TWeakPtr<FAffinityTableNode> Node : StaleNodes)	// -V1078 Container is filled in lambda function above
 	{
 		DeleteRow(Node);
 	}
@@ -1826,7 +1944,7 @@ void FAffinityTableEditor::ResyncAsset()
 		ColumnRoot);
 
 	HasDeletes |= StaleNodes.Num() > 0;
-	for (TWeakPtr<FAffinityTableNode> Node : StaleNodes)
+	for (TWeakPtr<FAffinityTableNode> Node : StaleNodes)	// -V1078 Container is filled in lambda function above
 	{
 		DeleteColumn(Node);
 	}
@@ -1847,7 +1965,7 @@ void FAffinityTableEditor::ResyncAsset()
 	//////////////////////////////////////////////////////////////////////////
 
 	// (Probably the most expensive update call in the editor)
-	UpdateCells(CellAssetIndexes | CellInheritance | CellDescription | CellData);
+	UpdateCells(CellAssetIndexes | CellInheritance | CellDescription | CellDataInheritance);
 
 	UpdatePageSet();
 
@@ -1908,10 +2026,10 @@ void FAffinityTableEditor::InitTableViewport()
 											[SAssignNew(VisibilityComboButton, SComboButton)
 													.ContentPadding(0)
 													.ForegroundColor(this, &FAffinityTableEditor::GetVisibilityBtnForeground)
-													.ButtonStyle(FEditorStyle::Get(), "ToggleButton")
+													.ButtonStyle(FAppStyle::Get(), "ToggleButton")
 													.OnGetMenuContent(this, &FAffinityTableEditor::GetVisibilityBtnContent)
 													.ButtonContent()
-														[SNew(SHorizontalBox) + SHorizontalBox::Slot().AutoWidth().VAlign(VAlign_Center)[SNew(SImage).Image(FEditorStyle::GetBrush("GenericViewButton"))] + SHorizontalBox::Slot().AutoWidth().Padding(2, 0, 0, 0).VAlign(VAlign_Center)[SNew(STextBlock).Text(LOCTEXT("VisibilityToggle", "Visibility"))]
+														[SNew(SHorizontalBox) + SHorizontalBox::Slot().AutoWidth().VAlign(VAlign_Center)[SNew(SImage).Image(FAppStyle::GetBrush("GenericViewButton"))] + SHorizontalBox::Slot().AutoWidth().Padding(2, 0, 0, 0).VAlign(VAlign_Center)[SNew(STextBlock).Text(LOCTEXT("VisibilityToggle", "Visibility"))]
 
 	]
 
@@ -1945,7 +2063,7 @@ void FAffinityTableEditor::HandlePageComboChanged(TSharedPtr<PageView> Item, ESe
 		if (ActivePageView.IsValid())
 		{
 			DisplaySelectedCellStruct();
-			UpdateCells(CellData | CellDescription | CellVisibleFields | CellInheritance);
+			UpdateCells(CellDataInheritance | CellDescription | CellVisibleFields | CellInheritance);
 		}
 	}
 }
@@ -2140,7 +2258,7 @@ void FAffinityTableEditor::RefreshTable(bool RegenerateTree)
 				SHeaderRow::Column(ColumnHeaderName)
 					.HAlignCell(HAlign_Fill)
 						[SNew(SBorder)
-								.BorderImage(FEditorStyle::GetNoBrush())
+								.BorderImage(FAppStyle::GetNoBrush())
 								.Visibility(EVisibility::HitTestInvisible)
 								.Padding(FMargin(0.0f, 0.0f, 0.0f, 3.0f))
 								.HAlign(HAlign_Center)
@@ -2191,7 +2309,7 @@ void FAffinityTableEditor::DeleteRow(const TWeakPtr<FAffinityTableNode>& Row)
 
 			// Remove from our list of available rows
 			FAffinityTableNode* ThisNodePtr = ThisNode.Pin().Get();
-			int32 RowIndex = this->AvailableRows.IndexOfByPredicate([ThisNodePtr](const FAffinityTableNode::NodeSharedPtr& Ptr) {
+			const int32 RowIndex = this->AvailableRows.IndexOfByPredicate([ThisNodePtr](const FAffinityTableNode::NodeSharedPtr& Ptr) {
 				return Ptr.IsValid() && Ptr.Get() == ThisNodePtr;
 			});
 			if (RowIndex != INDEX_NONE)
@@ -2227,8 +2345,8 @@ void FAffinityTableEditor::DeleteColumn(const TWeakPtr<FAffinityTableNode>& Colu
 		FLambdaWalker DeleteWalker([this](TWeakPtr<FAffinityTableNode> ThisNode) {
 			// Remove from our available columns
 			check(ThisNode.IsValid());
-			FAffinityTableNode* NodePtr = ThisNode.Pin().Get();
-			FName TagName = NodePtr->GetTag().GetTagName();
+			const FAffinityTableNode* NodePtr = ThisNode.Pin().Get();
+			const FName TagName = NodePtr->GetTag().GetTagName();
 			HeaderRow->RemoveColumn(TagName);
 			ColumnNodes.Remove(TagName);
 
@@ -2255,7 +2373,7 @@ void FAffinityTableEditor::PickColorForHeader(SAffinityTableHeader* Header, bool
 	check(TableBeingEdited);
 	FColorPickerArgs PickerArgs;
 
-	PickerArgs.InitialColorOverride = Header->GetNode().Pin()->GetColor();
+	PickerArgs.InitialColor = Header->GetNode().Pin()->GetColor();
 	PickerArgs.bOnlyRefreshOnOk = true;
 	PickerArgs.OnColorCommitted = FOnLinearColorValueChanged::CreateLambda([=](FLinearColor NewColor) {
 		FAffinityTableNode* NodePtr = Header->GetNode().Pin().Get();
@@ -2275,18 +2393,20 @@ void FAffinityTableEditor::PickColorForHeader(SAffinityTableHeader* Header, bool
 
 TSharedRef<SDockTab> FAffinityTableEditor::SpawnCellPropertiesTab(const FSpawnTabArgs& Args)
 {
-	return SNew(SDockTab)
-		.Icon(FEditorStyle::GetBrush("GenericEditor.Tabs.Properties"))
-		.TabColorScale(GetTabColorScale())
-			[DetailsView->GetWidget().ToSharedRef()];
+	TSharedPtr<SDockTab> NewTab = SNew(SDockTab)
+									  .TabColorScale(GetTabColorScale())
+										  [DetailsView->GetWidget().ToSharedRef()];
+	NewTab->SetTabIcon(FAppStyle::GetBrush("GenericEditor.Tabs.Properties"));
+	return NewTab.ToSharedRef();
 }
 
 TSharedRef<SDockTab> FAffinityTableEditor::SpawnTablePropertiesTab(const FSpawnTabArgs& Args)
 {
-	return SNew(SDockTab)
-		.Icon(FEditorStyle::GetBrush("GenericEditor.Tabs.Properties"))
-		.TabColorScale(GetTabColorScale())
-			[TableDetailsView.ToSharedRef()];
+	TSharedPtr<SDockTab> NewTab = SNew(SDockTab)
+									  .TabColorScale(GetTabColorScale())
+										  [TableDetailsView.ToSharedRef()];
+	NewTab->SetTabIcon(FAppStyle::GetBrush("GenericEditor.Tabs.Properties"));
+	return NewTab.ToSharedRef();
 }
 
 TSharedRef<SDockTab> FAffinityTableEditor::SpawnTableWidgetTab(const FSpawnTabArgs& Args)
@@ -2297,7 +2417,7 @@ TSharedRef<SDockTab> FAffinityTableEditor::SpawnTableWidgetTab(const FSpawnTabAr
 		.TabColorScale(GetTabColorScale())
 			[SNew(SBorder)
 					.Padding(2)
-					.BorderImage(FEditorStyle::GetBrush("ToolPanel.GroupBorder"))
+					.BorderImage(FAppStyle::GetBrush("ToolPanel.GroupBorder"))
 						[TableViewport.ToSharedRef()]];
 }
 

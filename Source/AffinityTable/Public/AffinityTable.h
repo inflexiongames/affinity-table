@@ -1,5 +1,5 @@
 /**
- * Copyright 2022 Inflexion Games. All Rights Reserved.
+ * Copyright 2024 Inflexion Games. All Rights Reserved.
  *
  * Licensed under the Apache License, Version 2.0 (the "License");
  * you may not use this file except in compliance with the License.
@@ -14,7 +14,6 @@
  * limitations under the License.
  */
 
-
 #pragma once
 
 #if WITH_EDITOR
@@ -24,10 +23,8 @@
 #include "CoreMinimal.h"
 #include "GameplayTagContainer.h"
 #include "Kismet/BlueprintFunctionLibrary.h"
-#include "Kismet/KismetArrayLibrary.h"
 #include "Logging/LogMacros.h"
 #include "UObject/Class.h"
-#include "UObject/NoExportTypes.h"
 #include "AffinityTable.generated.h"
 
 DECLARE_LOG_CATEGORY_EXTERN(LogAffinityTable, Log, All);
@@ -40,10 +37,7 @@ struct FCellDataArrayWrapper
 {
 	GENERATED_USTRUCT_BODY()
 
-public:
-	FCellDataArrayWrapper()
-	{
-	}
+	FCellDataArrayWrapper() = default;
 
 	TArray<FAffinityTableCellDataWrapper> CellDataArray;
 };
@@ -56,9 +50,8 @@ struct FAffinityTableCellDataWrapper
 {
 	GENERATED_USTRUCT_BODY()
 
-public:
-	FAffinityTableCellDataWrapper(uint8* InDataPtr = nullptr) :
-		RawDataPtr(InDataPtr)
+	FAffinityTableCellDataWrapper(uint8* InDataPtr = nullptr)
+		: RawDataPtr(InDataPtr)
 	{
 	}
 
@@ -70,7 +63,7 @@ public:
  *
  *	Grid queries costs at least two map lookups, and at most n x m lookups, where
  *	n is the number of segments of the row tag, and m is the number of segments in the
- *	column tag. Data misses cause hierarchical lookups. 
+ *	column tag. Data misses cause hierarchical lookups.
  *
  *	Lookups produce a pair of TagIndexes that reference the requested row | column for any
  *	such array in any page. Therefore the cost of finding a match is invariant to the number of queried structures.
@@ -82,7 +75,7 @@ public:
  *	For example, assume the map Row(tag) = { a: 0, a.a: 1, b: 2 },
  *
  *		- appending b.a produces { ..., b.a: 3 }
- *		- deleting a.a removes it from Row(tag), recycling its cell handle. 
+ *		- deleting a.a removes it from Row(tag), recycling its cell handle.
  *		- re-adding a.a produces Row(tag) = { ..., a.a: 4 }
  *		- Where Page(structure n).Rows[0] = [Handle 1, ...Handle n], deleting the n-1 column will yield [Handle1, ..., InvalidHandle, Handle n]
  *
@@ -92,7 +85,7 @@ public:
 /**
  * An asset that defines data relationships between pairs of tags.
  *
- * Tag intersections contain a collection of data in the form of one or more UScriptStruct's. Queries 
+ * Tag intersections contain a collection of data in the form of one or more UScriptStruct's. Queries
  * are taxonomic, taking advantage of the nature of gameplay tags.
  *
  * Asset editing is done by the AffinityTableEditor.
@@ -108,7 +101,7 @@ public:
 	using TagIndex = uint32;
 
 	/** Invalid tag index designation */
-	static const uint32 InvalidIndex = MAX_uint32;
+	static constexpr uint32 InvalidIndex = MAX_uint32;
 
 	/** Quickly identifies a cell by its row and column index */
 	struct Cell
@@ -122,9 +115,9 @@ public:
 	{
 		FGameplayTag Row;
 		FGameplayTag Column;
+		bool operator!=(const CellTags& Parent) const;
 	};
 
-public:
 	/** Provides context about the data contained in this asset */
 	UPROPERTY(EditAnywhere, Category = Table)
 	FString Description;
@@ -140,7 +133,6 @@ public:
 	UPROPERTY()
 	TArray<FGameplayTag> ColumnTags;
 
-public:
 	/**
 	 * Creates a new UAffinityTable instance
 	 * @param ObjectInitializer Valid default object initialization data
@@ -148,7 +140,7 @@ public:
 	UAffinityTable(const FObjectInitializer& ObjectInitializer = FObjectInitializer::Get());
 
 	/** Cleans up this instance */
-	virtual ~UAffinityTable();
+	virtual ~UAffinityTable() override;
 
 	// UObject Interface
 	virtual void GetPreloadDependencies(TArray<UObject*>& OutDeps) override;
@@ -171,36 +163,37 @@ public:
 	/**
 	 * Retrieve in-memory data for a given cell/structure, or nullptr if the parameters are invalid
 	 * @param InCell cell address for the structure data
-	 * @param Type of structure we're interested in
+	 * @param InScriptStruct expected structure type
 	 */
-	uint8* GetCellData(const Cell& InCell, const UScriptStruct* InScriptStruct);
+	uint8* GetCellData(const Cell InCell, const UScriptStruct* InScriptStruct) const;
 
 	/**
 	 * Retrieve in-memory data for a given row/structure, or nullptr if the parameters are invalid
 	 * @param RowIndex index of the row for the structure data
-	 * @param Type of structure we're interested in
+	 * @param InScriptStruct expected structure type
+	 * @param OutData
 	 */
-	void GetRowData(TagIndex RowIndex, const UScriptStruct* InScriptStruct, TArray<uint8*>& OutData);
+	void GetRowData(TagIndex RowIndex, const UScriptStruct* InScriptStruct, TArray<uint8*>& OutData) const;
 
 	/**
 	 * Queries an affinity table for information contained at the intersection of the provided row and column.
 	 * @param InCellTags Coordinates of the requested cell
 	 * @param ExactMatch If true, look for an exact Row Vs Column match. Otherwise find the closest tag
 	 * @param InStructureTypes The types of structure to return. These must be known to the table asset.
-	 * @param OutMemoryPtrs Pointers to hold data locations for the requested structures, InStructureTypes order. 
+	 * @param OutMemoryPtrs Pointers to hold data locations for the requested structures, InStructureTypes order.
  	 * @return True if a match was found.
 	 */
-	bool Query(const CellTags& InCellTags, bool ExactMatch, TArray<const UScriptStruct*>& InStructureTypes, TArray<FAffinityTableCellDataWrapper>& OutMemoryPtrs);
+	bool Query(const CellTags& InCellTags, bool ExactMatch, TArray<const UScriptStruct*>& InStructureTypes, TArray<FAffinityTableCellDataWrapper>& OutMemoryPtrs) const;
 
 	/**
 	 * Queries an affinity table for information contained at in the provided row.
 	 * @param RowTag Requested Row to get the data for
 	 * @param ExactMatch If true, look for an exact Row Vs Column match. Otherwise find the closest tag
 	 * @param InStructureTypes The types of structure to return. These must be known to the table asset.
-	 * @param OutMemoryPtrs Pointers to hold data locations for the requested structures, InStructureTypes order. 
+	 * @param OutMemoryPtrs Pointers to hold data locations for the requested structures, InStructureTypes order.
  	 * @return True if a match was found.
 	 */
-	bool QueryForRow(const FGameplayTag& RowTag, bool ExactMatch, TArray<const UScriptStruct*>& InStructureTypes, TArray<FCellDataArrayWrapper>& OutMemoryPtrs);
+	bool QueryForRow(const FGameplayTag& RowTag, bool ExactMatch, TArray<const UScriptStruct*>& InStructureTypes, TArray<FCellDataArrayWrapper>& OutMemoryPtrs) const;
 
 #if WITH_EDITOR
 
@@ -214,7 +207,7 @@ public:
 	 * Assigns a callback for structure change event notification
 	 * @param InCallback A correctly-formed callback
 	 */
-	void SetStructureChangeCallback(StructureChangeCallback InCallback);
+	void SetStructureChangeCallback(const StructureChangeCallback& InCallback);
 
 	/**
 	 * Reacts to changes on this object's properties
@@ -234,17 +227,23 @@ public:
 		return Rows;
 	}
 
+	/** Tells if this table ran into any errors while loading */
+	FORCEINLINE bool HasLoadingErrors() const
+	{
+		return bHasLoadingErrors;
+	}
+
 	/**
 	 * Adds a new row. Returns false if the row already exists
 	 * @param InTag Tag to add
 	 */
-	bool AddRow(FGameplayTag& InTag);
+	bool AddRow(const FGameplayTag& InTag);
 
 	/**
 	 * Adds a new column. Returns false if the column already exists
 	 * @param InTag Tag to add
 	 */
-	bool AddColumn(FGameplayTag& InTag);
+	bool AddColumn(const FGameplayTag& InTag);
 
 	/**
 	 * Removes the row that contains this tag.
@@ -298,11 +297,36 @@ public:
 	/**
 	 * Removes any existing inheritance link recorded for this cell.
 	 * This points the cell to an invalid tag, meaning we 'know' it is not linked as opposed to not knowing
-	 * about the tag at all. The editor proceeds in different ways accordingly. 
+	 * about the tag at all. The editor proceeds in different ways accordingly.
 	 */
 	void RemoveInheritanceLink(const UScriptStruct* InStruct, const CellTags& InCell);
 
+	/**
+	 * Performs a deep compare of the structured data in the provided cells and returns true if
+	 * they are identical.
+	 *
+	 * @param Struct A structure that describes the memory space of the cells
+	 * @param CellA First cell to compare
+	 * @param CellB Second cell to compare
+	 * @return True if the data contained by the cells is identical
+	 */
+	bool AreCellsIdentical(const UScriptStruct* Struct, const Cell& CellA, const Cell& CellB) const;
 #endif
+
+protected:
+#if WITH_EDITOR
+	/**
+	 * Runs logic that needs to happen in Serialize() before the call to Super::Serialize()
+	 */
+	void PreSaveTable();
+#endif
+
+	/**
+	 * Allocates memory pages for our owned structures.
+	 * @param InRows Number of rows to allocate
+	 * @param InColumns Number of columns to allocate per row
+	 */
+	void AllocatePageMemory(uint32 InRows, uint32 InColumns);
 
 private:
 	/** Defines a map of inheritance connections */
@@ -314,31 +338,39 @@ private:
 	 */
 	void LoadTable(FArchive& Ar);
 
+	/**
+	 * Takes the row and column arrays and uses them to populate respective map indexes.
+	 * Used by our loading sequences.
+	 */
+	void GenerateRowAndColumnMaps();
+
 	// Compatibility migrations.
 	//
 	// These functions implement a FULL loading procedure (minus the version check), plus any required
 	// compatibility operations in order to leave the table in a functional state.
 
-	/** Loads tables with format version 2 */
-	//void LoadTable_V2(FArchive& Ar); //left as comment for example of a version migration.
+	/** Loads an affinity table at V3 */
+	void LoadTable_V3(FArchive& Ar);
 
 	/**
 	 * Clears all data on this table, freeing up all memory utilized by any existing structures.
 	 * Does not touch exposed properties. Failing to re-allocate structure memory after this call
-	 * will result in memory exceptions. 
+	 * will result in memory exceptions.
 	 */
 	void ClearTable();
 
 #if WITH_EDITOR
 	/**
-	 * Runs logic that needs to happen in Serialize() before the call to Super::Serialize()
-	 */
-	void PreSaveTable();
-	/**
 	 * Saves the contents of this asset
 	 * @param Ar Archive to save our table into
 	 */
 	void SaveTable(FArchive& Ar);
+
+	/**
+	 * Ensure that our tag hierarchy is continuous.
+	 * Discontinuities happen when tags are deleted or renamed.
+	 */
+	void EnsureTagHierarchy();
 #endif
 
 	/**
@@ -352,20 +384,13 @@ private:
 	 * @param Page The page that holds or receives the data
 	 * @param Struct The structure that corresponds to this page
 	 */
-	void SerializePage(FArchive& Ar, FAffinityTablePage* Page, UScriptStruct* Struct);
-
-	/**
-	 * Allocates memmory pages for our owned structures.
-	 * @param InRows Number of rows to allocate
-	 * @param InColumns Number of columns to allocate per row
-	 */
-	void AllocatePageMemory(uint32 InRows, uint32 InColumns);
+	void SerializePage(FArchive& Ar, const FAffinityTablePage* Page, UScriptStruct* Struct);
 
 	/**
 	 * Make a single hashable string for the provided cell
 	 * @param InCell The cell to hash
 	 */
-	FString StringIDForCell(const CellTags& InCell);
+	static FString StringIDForCell(const CellTags& InCell);
 
 	/**
 	 * Finds a tag index in the provided map
@@ -373,19 +398,19 @@ private:
 	 * @param InTag Valid tag
 	 * @param ExactMatch If true, only an exact match is valid
 	 */
-	TagIndex GetIndex(const TMap<FGameplayTag, TagIndex>& InMap, const FGameplayTag& InTag, bool ExactMatch) const;
+	static TagIndex GetIndex(const TMap<FGameplayTag, TagIndex>& InMap, const FGameplayTag& InTag, bool ExactMatch);
 
 	/**
 	 * Verify that the provided structure is loaded. Attempt to load if necessary.
 	 * @param ScriptStruct Structure to verify
 	 */
-	void EnsureStructIsLoaded(UScriptStruct* ScriptStruct);
+	void EnsureStructIsLoaded(UScriptStruct* ScriptStruct) const;
 
 	/**
 	 * Finds the memory page for the provided structure. Returns nullptr if we have no page
 	 * @param InScriptStruct non-null pointer to a valid structure
 	 */
-	FAffinityTablePage* GetPageForStruct(const UScriptStruct* InScriptStruct);
+	FAffinityTablePage* GetPageForStruct(const UScriptStruct* InScriptStruct) const;
 
 	/** Tags available in our table's rows */
 	TMap<FGameplayTag, TagIndex> Rows;
@@ -406,28 +431,31 @@ private:
 	TMap<FName, InheritanceMap> InheritanceMaps;
 
 	/** Index generator for rows */
-	TagIndex NextRowIndex;
+	TagIndex NextRowIndex{ 0 };
 
 	/** Index generator for columns */
-	TagIndex NextColumnIndex;
+	TagIndex NextColumnIndex{ 0 };
 
 	/** True if we do not allow dynamic allocations */
-	bool FixedModeActive;
+	bool bFixedModeActive{ true };
+
+	/** True if we ran into any errors when loading this table */
+	bool bHasLoadingErrors{ false };
 
 	/** Data serialization versioning */
 	static const uint32 FileFormatVersion;
 
-#if WITH_EDITOR
+#if WITH_EDITORONLY_DATA
 	/** Callback for events happening to our structure array */
 	StructureChangeCallback ChangeCallback;
 #endif
 };
 
 /**
- * Utility functions that expose Affinity Tables to blueprints. 
+ * Utility functions that expose Affinity Tables to blueprints.
  */
 UCLASS()
-class AFFINITYTABLE_API UAffinityTableBlueprintLibrary : public UBlueprintFunctionLibrary
+class AFFINITYTABLE_API UAffinityTableBlueprintLibrary final : public UBlueprintFunctionLibrary
 {
 	GENERATED_BODY()
 
@@ -458,8 +486,8 @@ public:
 		P_FINISH;
 
 		check(Table);
-		UAffinityTable::CellTags Cell{ RowTag, ColumnTag };
-		*(bool*) RESULT_PARAM = Table->Query(Cell, ExactMatch, StructureTypes, OutMemoryPtrs);
+		const UAffinityTable::CellTags Cell{ RowTag, ColumnTag };
+		*static_cast<bool*>(RESULT_PARAM) = Table->Query(Cell, ExactMatch, StructureTypes, OutMemoryPtrs);
 	}
 
 	// Implements QueryTableForRow
@@ -474,7 +502,7 @@ public:
 		P_FINISH;
 
 		check(Table);
-		*(bool*) RESULT_PARAM = Table->QueryForRow(RowTag, ExactMatch, StructureTypes, OutMemoryPtrs);
+		*static_cast<bool*>(RESULT_PARAM) = Table->QueryForRow(RowTag, ExactMatch, StructureTypes, OutMemoryPtrs);
 	}
 
 	// Implements GetTableCellDataFromArray
@@ -506,8 +534,8 @@ public:
 
 		// Re-purpose the out parameter. The caller must have changed its type and ptr to the structure we are writing
 		Stack.StepCompiledIn<FArrayProperty>(nullptr);
-		uint8* OutDataPtr = Stack.MostRecentPropertyAddress;
-		FArrayProperty* OutArrayProperty = CastFieldChecked<FArrayProperty>(Stack.MostRecentProperty);
+		const uint8* OutDataPtr = Stack.MostRecentPropertyAddress;
+		const FArrayProperty* OutArrayProperty = CastFieldChecked<FArrayProperty>(Stack.MostRecentProperty);
 
 		if (!OutArrayProperty)
 		{
@@ -526,9 +554,9 @@ public:
 		FScriptArrayHelper OutArrayHelper(OutArrayProperty, OutDataPtr);
 		for (int i = 0; i < MemoryPtrs[DataIndex].CellDataArray.Num(); i++)
 		{
-			int outIndex = OutArrayHelper.AddValue();
-			uint8* outRawData = OutArrayHelper.GetRawPtr(outIndex);
-			StructType->CopyScriptStruct(outRawData, MemoryPtrs[DataIndex].CellDataArray[i].RawDataPtr);
+			const int OutIndex = OutArrayHelper.AddValue();
+			uint8* OutRawData = OutArrayHelper.GetRawPtr(OutIndex);
+			StructType->CopyScriptStruct(OutRawData, MemoryPtrs[DataIndex].CellDataArray[i].RawDataPtr);
 		}
 	}
 };

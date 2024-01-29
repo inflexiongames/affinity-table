@@ -1,5 +1,5 @@
 /**
- * Copyright 2022 Inflexion Games. All Rights Reserved.
+ * Copyright 2024 Inflexion Games. All Rights Reserved.
  *
  * Licensed under the Apache License, Version 2.0 (the "License");
  * you may not use this file except in compliance with the License.
@@ -13,8 +13,6 @@
  * See the License for the specific language governing permissions and
  * limitations under the License.
  */
-
-
 #include "AffinityTableListViewRow.h"
 
 #include "AffinityTableCell.h"
@@ -24,7 +22,8 @@
 
 #include "AffinityTableHeader.h"
 #include "Framework/Commands/GenericCommands.h"
-#include "Framework/MultiBox/MultiBoxBuilder.h"
+#include "Misc/MessageDialog.h"
+#include "ScopedTransaction.h"
 #include "Widgets/Colors/SColorBlock.h"
 #include "Widgets/SCompoundWidget.h"
 
@@ -67,7 +66,7 @@ protected:
 					.VAlign(VAlign_Fill)
 						[SNew(STextBlock)
 								.Margin(FMargin(CellMargin + FAffinityTableStyles::RowHeaderColorWidth * HandleCount, CellMargin, CellMargin, CellMargin))
-								.Text(FText::FromName(Ptr->GetTag().GetTagName()))]];
+								.Text(MakeHeaderName())]];
 
 		// Top color margin for expanded rows
 		if (!Ptr->IsCollapsed() && Ptr->HasChildren())

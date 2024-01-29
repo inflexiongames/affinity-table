@@ -1,5 +1,5 @@
 /**
- * Copyright 2022 Inflexion Games. All Rights Reserved.
+ * Copyright 2024 Inflexion Games. All Rights Reserved.
  *
  * Licensed under the Apache License, Version 2.0 (the "License");
  * you may not use this file except in compliance with the License.
@@ -13,7 +13,6 @@
  * See the License for the specific language governing permissions and
  * limitations under the License.
  */
-
 #include "AffinityTableStyles.h"
 
 #include "EditorStyleSet.h"
@@ -109,16 +108,16 @@ const ISlateStyle& FAffinityTableStyles::Get()
 
 TSharedRef<class FSlateStyleSet> FAffinityTableStyles::CreateStyles()
 {
-	const FTextBlockStyle NormalText = FEditorStyle::GetWidgetStyle<FTextBlockStyle>("NormalText");
+	const FTextBlockStyle NormalText = FAppStyle::GetWidgetStyle<FTextBlockStyle>("NormalText");
 	TSharedRef<FSlateStyleSet> Style = MakeShareable(new FSlateStyleSet("AffinityTableEditorStyle"));
 
 	/** Row headers */
 	FTableRowStyle RowStyle = FCoreStyle::Get().GetWidgetStyle<FTableRowStyle>("TableView.Row");
 	RowStyle
-		.SetInactiveBrush(*FEditorStyle::GetBrush("NoBrush"))
-		.SetInactiveHoveredBrush(*FEditorStyle::GetBrush("NoBrush"))
-		.SetActiveBrush(*FEditorStyle::GetBrush("NoBrush"))
-		.SetActiveHoveredBrush(*FEditorStyle::GetBrush("NoBrush"))
+		.SetInactiveBrush(*FAppStyle::GetBrush("NoBrush"))
+		.SetInactiveHoveredBrush(*FAppStyle::GetBrush("NoBrush"))
+		.SetActiveBrush(*FAppStyle::GetBrush("NoBrush"))
+		.SetActiveHoveredBrush(*FAppStyle::GetBrush("NoBrush"))
 		.SetSelectedTextColor(RowStyle.TextColor);
 
 	Style->Set("AffinityTableEditor.RowHeader", RowStyle);

@@ -1,5 +1,5 @@
 /**
- * Copyright 2022 Inflexion Games. All Rights Reserved.
+ * Copyright 2024 Inflexion Games. All Rights Reserved.
  *
  * Licensed under the Apache License, Version 2.0 (the "License");
  * you may not use this file except in compliance with the License.
@@ -13,24 +13,18 @@
  * See the License for the specific language governing permissions and
  * limitations under the License.
  */
-
-
 #include "AffinityTableNode.h"
 #include "AffinityTableStyles.h"
 
 // FAffinityTableNode
 //////////////////////////////////////////////////////////////////////////
 
-FAffinityTableNode::FAffinityTableNode(const FGameplayTag& InTag, UAffinityTable::TagIndex InTagIndex, FAffinityTableNode* InParent /* = nullptr */, const FLinearColor& InColor /* = FLinearColor::White */) :
-	Tag(InTag),
-	TagIndex(InTagIndex),
-	Parent(InParent),
-	TagColor(InColor),
-	Collapsed(InParent != nullptr)
-{
-}
-
-FAffinityTableNode::~FAffinityTableNode()
+FAffinityTableNode::FAffinityTableNode(const FGameplayTag& InTag, UAffinityTable::TagIndex InTagIndex, FAffinityTableNode* InParent /* = nullptr */, const FLinearColor& InColor /* = FLinearColor::White */)
+	: Tag(InTag)
+	, TagIndex(InTagIndex)
+	, Parent(InParent)
+	, TagColor(InColor)
+	, Collapsed(InParent != nullptr)
 {
 }
 

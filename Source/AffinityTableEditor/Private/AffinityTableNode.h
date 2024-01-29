@@ -1,5 +1,5 @@
 /**
- * Copyright 2022 Inflexion Games. All Rights Reserved.
+ * Copyright 2024 Inflexion Games. All Rights Reserved.
  *
  * Licensed under the Apache License, Version 2.0 (the "License");
  * you may not use this file except in compliance with the License.
@@ -13,7 +13,6 @@
  * See the License for the specific language governing permissions and
  * limitations under the License.
  */
-
 
 #pragma once
 
@@ -54,7 +53,7 @@ public:
 	FAffinityTableNode(const FGameplayTag& InTag, UAffinityTable::TagIndex InTagIndex = UAffinityTable::InvalidIndex, FAffinityTableNode* InParent = nullptr, const FLinearColor& InColor = FLinearColor::White);
 
 	/** Node destructor */
-	~FAffinityTableNode();
+	~FAffinityTableNode() = default;
 
 	/**
 	 * Inserts tags in the provided array from tail to head (FIFO), creating nodes
@@ -71,13 +70,13 @@ public:
 
 	/**
 	 * Unlinks this node from our children, if it belongs to us.
-	 * @param ChildNode Node to remove 
+	 * @param ChildNode Node to remove
 	 */
 	void RemoveChild(const FAffinityTableNode* ChildNode);
 
 	/**
 	 * Removes this node from its parent tree. This operation may cause the node to be
-	 * deleted along with its children when the last transient reference pointer goes out of scope. 
+	 * deleted along with its children when the last transient reference pointer goes out of scope.
 	 */
 	void Unlink();
 
@@ -199,7 +198,7 @@ private:
  * Base class for node walkers, functional objects that gather, add, or modify data in our tree.
  * We provide templated smart pointers and naked pointer implementations, since different
  * parts of the engine (particularly UI components) are opinionated in different ways. You'll
- * want to implement either given the situation, but usually not both. 
+ * want to implement either given the situation, but usually not both.
  */
 class IAffinityTableNodeWalker
 {
@@ -217,6 +216,8 @@ public:
 	 */
 	void WalkChildren(TWeakPtr<FAffinityTableNode> InNode);
 	void WalkChildren(FAffinityTableNode* InNode);
+
+	virtual ~IAffinityTableNodeWalker() = default;
 
 protected:
 	/**
@@ -252,32 +253,11 @@ public:
 	 * Creates a new walker
 	 * @param InCallback Function to issue for each node in the tree
 	 */
-	FLambdaWalker(NodeCallback InCallback, NodeCallbackPtr InCallbackPtr = nullptr) :
-		Callback(InCallback),
-		CallbackPtr(InCallbackPtr){};
+	FLambdaWalker(NodeCallback InCallback, NodeCallbackPtr InCallbackPtr = nullptr)
+		: Callback(InCallback)
+		, CallbackPtr(InCallbackPtr){};
 
-	/**
-	 * Creates a walker and starts node recursion in a single step
-	 * @param InCallback Function to execute for each node
-	 * @param InStartNode first recursion node
-	 */
-	FLambdaWalker(NodeCallback InCallback, TWeakPtr<FAffinityTableNode> InStartNode) :
-		Callback(InCallback),
-		CallbackPtr(nullptr)
-	{
-		Walk(InStartNode);
-	}
-
-	FLambdaWalker(NodeCallbackPtr InCallback, FAffinityTableNode* InStartNode) :
-		Callback(nullptr),
-		CallbackPtr(InCallback)
-	{
-		Walk(InStartNode);
-	}
-
-	virtual ~FLambdaWalker()
-	{
-	}
+	virtual ~FLambdaWalker() override = default;
 
 protected:
 	virtual bool Visit(TWeakPtr<FAffinityTableNode>& InNode) override

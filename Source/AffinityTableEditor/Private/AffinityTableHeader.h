@@ -1,5 +1,5 @@
 /**
- * Copyright 2022 Inflexion Games. All Rights Reserved.
+ * Copyright 2024 Inflexion Games. All Rights Reserved.
  *
  * Licensed under the Apache License, Version 2.0 (the "License");
  * you may not use this file except in compliance with the License.
@@ -13,8 +13,6 @@
  * See the License for the specific language governing permissions and
  * limitations under the License.
  */
-
-
 #pragma once
 
 #include "CoreMinimal.h"
@@ -31,6 +29,7 @@ class FAffinityTableEditor;
 class SAffinityTableHeader : public SCompoundWidget
 {
 public:
+	// -V:SLATE_BEGIN_ARGS:832, Constructor is obfuscated by macro
 	SLATE_BEGIN_ARGS(SAffinityTableHeader)
 	{
 	}
@@ -69,6 +68,9 @@ protected:
 
 	/** Handle the using configuring the color of this header */
 	virtual void OnSetColor() = 0;
+
+	/** Returns the name for this header based on the node's state */
+	FText MakeHeaderName() const;
 
 	/** Reference to the node we are created after */
 	TWeakPtr<FAffinityTableNode> Node;

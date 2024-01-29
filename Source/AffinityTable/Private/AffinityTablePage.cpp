@@ -1,5 +1,5 @@
 /**
- * Copyright 2022 Inflexion Games. All Rights Reserved.
+ * Copyright 2024 Inflexion Games. All Rights Reserved.
  *
  * Licensed under the Apache License, Version 2.0 (the "License");
  * you may not use this file except in compliance with the License.
@@ -14,19 +14,17 @@
  * limitations under the License.
  */
 
-
 #include "AffinityTablePage.h"
 #include "AffinityTable.h"
 
-FAffinityTablePage::FAffinityTablePage(const UScriptStruct* InStruct, uint32 InRows, uint32 InColumns, bool InFixedMode) :
-	Struct(InStruct),
-	Columns(InColumns),
-	FixedMode(InFixedMode),
-	CurrentDatablock(0)
+FAffinityTablePage::FAffinityTablePage(const UScriptStruct* InStruct, uint32 InRows, uint32 InColumns, bool InFixedMode)
+	: Struct(InStruct)
+	, Columns(InColumns)
+	, FixedMode(InFixedMode)
+	, CurrentDatablock(0)
 {
-	// Allocate memory now, if we can
-	uint32 BlockCount = InRows * InColumns;
-	if (BlockCount)
+	// Allocate memory now, if we ca;
+	if (const uint32 BlockCount = InRows * InColumns)
 	{
 		AllocateBlocks(BlockCount);
 	}
@@ -46,7 +44,7 @@ FAffinityTablePage::FAffinityTablePage(const UScriptStruct* InStruct, uint32 InR
 FAffinityTablePage::~FAffinityTablePage()
 {
 	// Deallocate all blocks
-	for (FStructDatablock* Datablock : Datablocks)
+	for (const FStructDatablock* Datablock : Datablocks)
 	{
 		delete Datablock;
 	}
@@ -54,7 +52,7 @@ FAffinityTablePage::~FAffinityTablePage()
 
 void FAffinityTablePage::AddRow()
 {
-	TSharedPtr<Row> NewRow = MakeShareable(new Row);
+	const TSharedPtr<Row> NewRow = MakeShareable(new Row);
 	AppendHandles(NewRow.Get());
 	Rows.Add(NewRow);
 }
@@ -81,7 +79,7 @@ void FAffinityTablePage::DeleteRow(uint32 RowIndex)
 	// handles on each column will be recycled, and the memory space re-assigned as needed.
 	uint32 DatablockIndex;
 	FStructDatablock::DatablockHandle DatablockHandle;
-	for (DataHandle Column : *RowToDelete)
+	for (const DataHandle Column : *RowToDelete)
 	{
 		if (GetHandleData(Column, DatablockIndex, DatablockHandle))
 		{
@@ -102,7 +100,7 @@ void FAffinityTablePage::DeleteColumn(uint32 ColumnIndex)
 	{
 		if (ThisRow.IsValid())
 		{
-			check(ColumnIndex < (uint32) ThisRow->Num());
+			check(ColumnIndex < static_cast<uint32>(ThisRow->Num()));
 			DataHandle& ThisHandle = (*ThisRow)[ColumnIndex];
 			if (GetHandleData(ThisHandle, DatablockIndex, DatablockHandle))
 			{
@@ -114,7 +112,7 @@ void FAffinityTablePage::DeleteColumn(uint32 ColumnIndex)
 	DeletedColumns.Add(ColumnIndex);
 }
 
-FStructDatablock::DatablockPtr FAffinityTablePage::GetDatablockPtr(DataHandle Handle)
+FStructDatablock::DatablockPtr FAffinityTablePage::GetDatablockPtr(DataHandle Handle) const
 {
 	uint32 DatablockIndex;
 	FStructDatablock::DatablockHandle DatablockHandle;
@@ -126,27 +124,24 @@ FStructDatablock::DatablockPtr FAffinityTablePage::GetDatablockPtr(DataHandle Ha
 	return DataPtr;
 }
 
-FStructDatablock::DatablockPtr FAffinityTablePage::GetDatablockPtr(uint32 InRow, uint32 InColumn)
+FStructDatablock::DatablockPtr FAffinityTablePage::GetDatablockPtr(uint32 InRow, uint32 InColumn) const
 {
 	FStructDatablock::DatablockPtr Ptr = nullptr;
-	Row* SelectedRow = GetRow(InRow);
-	if (SelectedRow)
+	if (Row* SelectedRow = GetRow(InRow))
 	{
-		check(InColumn < (uint32) SelectedRow->Num());
+		check(InColumn < static_cast<uint32>(SelectedRow->Num()));
 		Ptr = GetDatablockPtr((*SelectedRow)[InColumn]);
 	}
 	return Ptr;
 }
 
-void FAffinityTablePage::GetDatablockPtrsForRow(uint32 InRow, TArray<FStructDatablock::DatablockPtr>& OutDataBlocks)
+void FAffinityTablePage::GetDatablockPtrsForRow(uint32 InRow, TArray<FStructDatablock::DatablockPtr>& OutDataBlocks) const
 {
-	Row* SelectedRow = GetRow(InRow);
-	if (SelectedRow)
+	if (Row* SelectedRow = GetRow(InRow))
 	{
 		for (int i = 0; i < SelectedRow->Num(); i++)
 		{
-			FStructDatablock::DatablockPtr Ptr = GetDatablockPtr((*SelectedRow)[i]);
-			if (Ptr)
+			if (FStructDatablock::DatablockPtr Ptr = GetDatablockPtr((*SelectedRow)[i]))
 			{
 				OutDataBlocks.Add(Ptr);
 			}
@@ -154,27 +149,38 @@ void FAffinityTablePage::GetDatablockPtrsForRow(uint32 InRow, TArray<FStructData
 	}
 }
 
+int32 FAffinityTablePage::GetStructSize() const
+{
+	// The size of our structure is constant
+	if (Datablocks.Num())
+	{
+		return Datablocks[0]->GetStructSize();
+	}
+	return 0;
+}
+
 void FAffinityTablePage::AllocateBlocks(uint32 Capacity)
 {
 	check(Capacity);
+	check(Struct.IsValid());
 
-	uint32 FulllBlocks = Capacity / FStructDatablock::MaxDatablockCapacity;
-	uint32 SmallBlock = Capacity % FStructDatablock::MaxDatablockCapacity;
+	uint32 FullBlocks = Capacity / FStructDatablock::MaxDatablockCapacity;
+	const uint32 SmallBlock = Capacity % FStructDatablock::MaxDatablockCapacity;
 
 	// This function always adds at least one datablock.
 	// Move the current datablock to the first new added set.
 	CurrentDatablock = Datablocks.Num();
 
-	while (FulllBlocks)
+	while (FullBlocks)
 	{
-		FStructDatablock* Datablock = new FStructDatablock(Struct, FStructDatablock::MaxDatablockCapacity, true);
+		FStructDatablock* Datablock = new FStructDatablock(Struct.Get(), FStructDatablock::MaxDatablockCapacity, true);
 		Datablocks.Add(Datablock);
-		--FulllBlocks;
+		--FullBlocks;
 	}
 
 	if (SmallBlock)
 	{
-		FStructDatablock* Datablock = new FStructDatablock(Struct, SmallBlock, true);
+		FStructDatablock* Datablock = new FStructDatablock(Struct.Get(), SmallBlock, true);
 		Datablocks.Add(Datablock);
 	}
 }
@@ -209,24 +215,24 @@ void FAffinityTablePage::AppendHandles(Row* InRow, uint32 Count)
 	}
 }
 
-FAffinityTablePage::DataHandle FAffinityTablePage::MakeHandle(uint32 DatablockIndex, FStructDatablock::DatablockHandle DatablockHandle)
+FAffinityTablePage::DataHandle FAffinityTablePage::MakeHandle(uint32 DatablockIndex, FStructDatablock::DatablockHandle DatablockHandle) const
 {
-	check(DatablockIndex < (uint32) Datablocks.Num());
+	check(DatablockIndex < static_cast<uint32>(Datablocks.Num()));
 	check(DatablockHandle != FStructDatablock::InvalidHandle);
 
 	// Index | Handle
-	DataHandle Handle = (static_cast<uint64>(DatablockIndex) << 32) | (DatablockHandle);
+	const DataHandle Handle = (static_cast<uint64>(DatablockIndex) << 32) | (DatablockHandle);
 	return Handle;
 }
 
-bool FAffinityTablePage::GetHandleData(DataHandle Handle, uint32& OutDatablockIndex, FStructDatablock::DatablockHandle& OutDatablockHandle)
+bool FAffinityTablePage::GetHandleData(DataHandle Handle, uint32& OutDatablockIndex, FStructDatablock::DatablockHandle& OutDatablockHandle) const
 {
 	if (Handle != InvalidDataHandle)
 	{
 		OutDatablockIndex = (Handle & 0xffffffff00000000) >> 32;
 		OutDatablockHandle = Handle & 0x00000000ffffffff;
 
-		check(OutDatablockIndex < (uint32) Datablocks.Num());
+		check(OutDatablockIndex < static_cast<uint32>(Datablocks.Num()));
 		check(OutDatablockHandle != FStructDatablock::InvalidHandle);
 		return true;
 	}
@@ -248,7 +254,7 @@ FAffinityTablePage::DataHandle FAffinityTablePage::FindAvailableHandle()
 				DatablockHandle = Datablock->NewHandle();
 				if (DatablockHandle != FStructDatablock::InvalidHandle)
 				{
-					CurrentDatablock = (uint32) i;
+					CurrentDatablock = static_cast<uint32>(i);
 					Handle = MakeHandle(CurrentDatablock, DatablockHandle);
 					break;
 				}

@@ -1,5 +1,5 @@
 /**
- * Copyright 2022 Inflexion Games. All Rights Reserved.
+ * Copyright 2024 Inflexion Games. All Rights Reserved.
  *
  * Licensed under the Apache License, Version 2.0 (the "License");
  * you may not use this file except in compliance with the License.
@@ -14,11 +14,11 @@
  * limitations under the License.
  */
 
-
 #pragma once
 
 #include "CoreMinimal.h"
 #include "Math/NumericLimits.h"
+#include "UObject/Class.h"
 
 /**
  * Owns and manages a block of memory that holds multiple structures of a specific UScriptStruct type.
@@ -52,8 +52,8 @@ public:
 
 	/**
 	 * @param InStruct Structure used to manage the data in our allocated block
-	 * @param DesiredCapacity Number of allocations to reserve on this block. Will cap at MaxDatablockCapacity. 
-	 * @param AllocNow If true, allocate right away. Otherwise alloc on first handle request. 
+	 * @param DesiredCapacity Number of allocations to reserve on this block. Will cap at MaxDatablockCapacity.
+	 * @param AllocNow If true, allocate right away. Otherwise alloc on first handle request.
 	 */
 	FStructDatablock(const UScriptStruct* InStruct, const uint32 DesiredCapacity, bool AllocNow = false);
 
@@ -74,12 +74,20 @@ public:
 
 	/**
 	 * Returns the memory location for a structure given its handle.
-	 * @param Handle Valid memory location handle for this block. 
+	 * @param Handle Valid memory location handle for this block.
 	 */
-	FORCEINLINE DatablockPtr GetMemoryBlock(DatablockHandle Handle)
+	FORCEINLINE DatablockPtr GetMemoryBlock(DatablockHandle Handle) const
 	{
 		check(Handle != InvalidHandle);
 		return Datablock + static_cast<SIZE_T>(Handle) * StructSize;
+	}
+
+	/**
+	 * Returns the size of our defining structure
+	 */
+	FORCEINLINE int32 GetStructSize() const
+	{
+		return static_cast<int32>(StructSize);
 	}
 
 	/**
@@ -90,17 +98,17 @@ public:
 private:
 	/**
 	 * Allocates our datablock. We can re-allocate if necessary, but a manual deletion has to happen first.
-	 * This call allocates the full capacity of the datablock. 
+	 * This call allocates the full capacity of the datablock.
 	 */
 	void Alloc();
 
 	/**
-	 * Deallocates our full datablock. All handles to our memory will be invalid.  
+	 * Deallocates our full datablock. All handles to our memory will be invalid.
 	 */
 	void Dealloc();
 
 	/** Struct used to manage our allocations. Assumed to be valid for the lifetime of this class */
-	const UScriptStruct* Struct;
+	TWeakObjectPtr<const UScriptStruct> Struct;
 
 	/** Pointer to the location of our allocated memory */
 	DatablockPtrType Datablock;

@@ -1,5 +1,5 @@
 /**
- * Copyright 2022 Inflexion Games. All Rights Reserved.
+ * Copyright 2024 Inflexion Games. All Rights Reserved.
  *
  * Licensed under the Apache License, Version 2.0 (the "License");
  * you may not use this file except in compliance with the License.
@@ -13,8 +13,6 @@
  * See the License for the specific language governing permissions and
  * limitations under the License.
  */
-
-
 #include "AffinityTableHeader.h"
 #include "AffinityTableEditor.h"
 #include "AffinityTableNode.h"
@@ -81,4 +79,14 @@ void SAffinityTableHeader::GatherUpstreamColors(TArray<FLinearColor>& Colors)
 		Colors.Add(ThisNode->GetColor());
 		ThisNode = ThisNode->GetParent();
 	};
+}
+
+FText SAffinityTableHeader::MakeHeaderName() const
+{
+	const FAffinityTableNode::NodeSharedPtr Ptr = Node.Pin();
+	const FString HeaderName = FString::Printf(TEXT("%s%s%s"),
+		Ptr->IsCollapsed() ? TEXT("[+] ") : TEXT(""),
+		*Ptr->GetTag().GetTagName().ToString(),
+		Ptr->IsCollapsed() ? TEXT(" ...") : TEXT(""));
+	return FText::FromString(HeaderName);
 }
